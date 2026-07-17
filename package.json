@@ -1,0 +1,17 @@
+{
+  "name": "wa-transfer",
+  "version": "1.0.0",
+  "description": "CLI tool to generate and export WhatsApp Web session credentials using Baileys",
+  "main": "get-session.js",
+  "scripts": {
+    "start": "node get-session.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": ["whatsapp", "baileys", "session", "auth"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "baileys": "^7.0.0-rc13"
+  }
+}
