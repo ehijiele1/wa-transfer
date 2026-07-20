@@ -1,17 +1,37 @@
 {
   "name": "wa-transfer",
   "version": "1.0.0",
-  "description": "CLI tool to generate and export WhatsApp Web session credentials using Baileys",
-  "main": "get-session.js",
+  "description": "WhatsApp Business Intelligence & Social Media Automation System",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node get-session.js",
-    "test": "echo \"No tests specified\" && exit 0"
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "node test-system.js",
+    "test:unit": "echo \"Unit tests not implemented yet\" && exit 0",
+    "test:integration": "node test-system.js",
+    "lint": "echo \"Linting not implemented yet\" && exit 0",
+    "typecheck": "tsc --noEmit"
   },
-  "keywords": ["whatsapp", "baileys", "session", "auth"],
+  "keywords": ["whatsapp", "baileys", "automation", "social-media", "real-estate", "bi"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "baileys": "^7.0.0-rc13"
+    "baileys": "^7.0.0-rc13",
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.3.1",
+    "node-cron": "^3.0.3",
+    "twitter-api-v2": "^1.18.0",
+    "instagram-graph-api": "^4.0.0",
+    "axios": "^1.6.0",
+    "form-data": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.10.5",
+    "@types/node-cron": "^3.0.11"
   }
 }

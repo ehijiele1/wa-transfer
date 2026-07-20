@@ -1,0 +1,27 @@
+export declare function generateId(): string;
+export declare function formatTimestamp(timestamp: number): string;
+export declare function sanitizeText(text: string): string;
+export declare function extractUrls(text: string): string[];
+export declare function truncateText(text: string, maxLength: number): string;
+export declare function isValidEmail(email: string): boolean;
+export declare function isValidUrl(url: string): boolean;
+export declare function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void;
+export declare function throttle<T extends (...args: any[]) => any>(func: T, limit: number): (...args: Parameters<T>) => void;
+export declare function retry<T>(fn: () => Promise<T>, maxAttempts?: number, delay?: number): Promise<T>;
+export declare function capitalize(text: string): string;
+export declare function formatNumber(num: number): string;
+export declare function formatCurrency(amount: number, currency?: string): string;
+export declare function formatDate(date: Date): string;
+export declare function formatTime(date: Date): string;
+export declare function calculateReadingTime(text: string): number;
+export declare function extractHashtags(text: string): string[];
+export declare function removeHashtags(text: string): string;
+export declare function extractMentions(text: string): string[];
+export declare function removeMentions(text: string): string;
+export declare function isValidPhone(phone: string): boolean;
+export declare function isValidPrice(price: string): boolean;
+export declare function extractPriceNumber(price: string): number;
+export declare function sleep(ms: number): Promise<void>;
+export declare function createExponentialBackoff(baseDelay?: number, maxDelay?: number, factor?: number): (attempt: number) => number;
+export declare function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T>;
+//# sourceMappingURL=index.d.ts.map
