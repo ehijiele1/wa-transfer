@@ -55,10 +55,24 @@ export class WhatsAppService {
       console.error('WhatsApp auth failure:', msg);
     });
 
-    this.client.on('ready', () => {
+    this.client.on('ready', async () => {
       this.readyTime = Date.now();
       this.reconnectAttempts = 0;
       console.log('WhatsApp connection established');
+
+      setTimeout(async () => {
+        try {
+          const chats = await this.client!.getChats();
+          const groups = chats.filter(c => c.isGroup);
+          console.log('=== AVAILABLE GROUPS (' + groups.length + ') ===');
+          for (const g of groups) {
+            console.log(g.name + ': ' + g.id._serialized);
+          }
+          console.log('=== END GROUPS ===');
+        } catch (e: any) {
+          console.log('Group listing unavailable: ' + e.message);
+        }
+      }, 15000);
     });
 
     this.client.on('disconnected', async (reason: string) => {
