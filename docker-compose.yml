@@ -1,12 +1,14 @@
-version: "3.8"
-
 services:
   wa-transfer:
     build: .
     container_name: wa-transfer
     stdin_open: true
     tty: true
+    ports:
+      - "3000:3000"
     volumes:
-      - ./creds:/app/creds
+      - ./wwebjs-auth:/app/wwebjs-auth
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
