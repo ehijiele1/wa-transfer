@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     libgbm1 \
     libxkbcommon0 \
+    libxfixes3 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
