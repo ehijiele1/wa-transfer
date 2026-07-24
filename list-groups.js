@@ -14,31 +14,49 @@ const client = new Client({
 client.on('ready', async () => {
   console.log('Connected. Fetching groups...\n');
 
-  // Wait for WhatsApp Web to fully sync
-  await new Promise(r => setTimeout(r, 5000));
+  const seen = new Set();
+  let attempts = 0;
 
-  try {
-    const chats = await client.getChats();
-    const groups = chats.filter(c => c.isGroup);
-
-    if (groups.length === 0) {
-      console.log('No groups found in this account.');
-      await client.destroy();
-      process.exit(0);
+  async function fetchGroups() {
+    try {
+      const chats = await client.getChats();
+      const groups = chats.filter(c => c.isGroup);
+      if (groups.length === 0) {
+        console.log('No groups found.');
+      } else {
+        console.log(`Found ${groups.length} groups:\n`);
+        for (const g of groups) {
+          const line = `${g.name}: ${g.id._serialized}`;
+          console.log(line);
+          seen.add(g.id._serialized);
+        }
+      }
+      return true;
+    } catch (err) {
+      attempts++;
+      console.log(`Attempt ${attempts} failed: ${err.message}`);
+      if (attempts < 3) {
+        console.log('Retrying in 5s...');
+        await new Promise(r => setTimeout(r, 5000));
+        return false;
+      }
+      return null;
     }
-
-    console.log(`Found ${groups.length} groups:\n`);
-
-    for (const g of groups) {
-      const info = `${g.name}: ${g.id._serialized}`;
-      console.log(info);
-    }
-
-    console.log('\nDone.');
-  } catch (err) {
-    console.error('Error fetching chats:', err.message);
   }
 
+  let result = await fetchGroups();
+  if (result === null) {
+    console.log('\nAll attempts failed. Listening for incoming messages instead...\n');
+    client.on('message_create', (msg) => {
+      if (msg.from.endsWith('@g.us') && !seen.has(msg.from)) {
+        seen.add(msg.from);
+        console.log(`${msg._data?.notifyName || msg.from}: ${msg.from}`);
+      }
+    });
+    await new Promise(r => setTimeout(r, 30000));
+  }
+
+  console.log('\nDone.');
   await client.destroy();
   process.exit(0);
 });
