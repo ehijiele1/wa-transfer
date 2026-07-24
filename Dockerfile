@@ -24,8 +24,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxkbcommon0 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g puppeteer --unsafe-perm
-
 COPY package*.json ./
 RUN npm install
 

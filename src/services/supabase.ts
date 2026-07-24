@@ -29,6 +29,7 @@ class SupabaseService {
       });
 
     if (error) {
+      if (error.code === 'PGRST205') return;
       console.error('Error saving message:', error);
       throw error;
     }
@@ -58,6 +59,7 @@ class SupabaseService {
       });
 
     if (error) {
+      if (error.code === 'PGRST205') return;
       console.error('Error saving property listing:', error);
       throw error;
     }
@@ -82,6 +84,7 @@ class SupabaseService {
       });
 
     if (error) {
+      if (error.code === 'PGRST205') return;
       console.error('Error saving promotion:', error);
       throw error;
     }

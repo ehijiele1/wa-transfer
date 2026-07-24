@@ -1,18 +1,16 @@
 import { Client, LocalAuth, Message as WWebMessage } from 'whatsapp-web.js';
 import { WhatsAppMessage } from '../types';
-import SupabaseService from './supabase';
 
 export class WhatsAppService {
   private client: Client | null = null;
-  private supabase: SupabaseService;
   private messageCallbacks: ((message: WhatsAppMessage) => void)[] = [];
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 3;
   private retryDelayMs = 5000;
+  private readyTime = 0;
+  private tableMissingLogged = false;
 
-  constructor() {
-    this.supabase = new SupabaseService();
-  }
+  constructor() {}
 
   async connect(): Promise<void> {
     try {
@@ -52,9 +50,9 @@ export class WhatsAppService {
     });
 
     this.client.on('ready', () => {
+      this.readyTime = Date.now();
       this.reconnectAttempts = 0;
       console.log('WhatsApp connection established');
-      this.monitorGroups();
     });
 
     this.client.on('disconnected', async (reason: string) => {
@@ -69,7 +67,9 @@ export class WhatsAppService {
       }
     });
 
-    this.client.on('message', async (message: WWebMessage) => {
+    this.client.on('message_create', async (message: WWebMessage) => {
+      if (message.fromMe) return;
+      if (this.readyTime > 0 && message.timestamp * 1000 < this.readyTime - 5000) return;
       await this.processMessage(message);
     });
   }
@@ -87,12 +87,11 @@ export class WhatsAppService {
         metadata: this.extractMetadata(message, chat),
       };
 
-      await this.supabase.saveMessage(whatsappMessage);
-
       for (const callback of this.messageCallbacks) {
         callback(whatsappMessage);
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.message?.includes('Target closed')) return;
       console.error('Error processing message:', error);
     }
   }
@@ -140,10 +139,6 @@ export class WhatsAppService {
     }
 
     return metadata;
-  }
-
-  private async monitorGroups(): Promise<void> {
-    console.log('WhatsApp client ready, monitoring configured groups');
   }
 
   onMessage(callback: (message: WhatsAppMessage) => void): void {
