@@ -13,22 +13,32 @@ const client = new Client({
 
 client.on('ready', async () => {
   console.log('Connected. Fetching groups...\n');
-  const chats = await client.getChats();
-  const groups = chats.filter(c => c.isGroup);
 
-  if (groups.length === 0) {
-    console.log('No groups found in this account.');
-    process.exit(0);
+  // Wait for WhatsApp Web to fully sync
+  await new Promise(r => setTimeout(r, 5000));
+
+  try {
+    const chats = await client.getChats();
+    const groups = chats.filter(c => c.isGroup);
+
+    if (groups.length === 0) {
+      console.log('No groups found in this account.');
+      await client.destroy();
+      process.exit(0);
+    }
+
+    console.log(`Found ${groups.length} groups:\n`);
+
+    for (const g of groups) {
+      const info = `${g.name}: ${g.id._serialized}`;
+      console.log(info);
+    }
+
+    console.log('\nDone.');
+  } catch (err) {
+    console.error('Error fetching chats:', err.message);
   }
 
-  console.log(`Found ${groups.length} groups:\n`);
-
-  for (const g of groups) {
-    const info = `${g.name}: ${g.id._serialized}`;
-    console.log(info);
-  }
-
-  console.log('\nDone.');
   await client.destroy();
   process.exit(0);
 });
