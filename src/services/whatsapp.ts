@@ -20,7 +20,13 @@ export class WhatsAppService {
           dataPath: './wwebjs-auth',
         }),
         puppeteer: {
-          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--user-data-dir=/tmp/chrome-profile',
+          ],
           headless: true,
         },
       });
