@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getAnonClient, getAdminClient, adminOnly, type SupabaseClient } from './supabaseClients';
 import config from '../config';
 import { PropertyListing, Promotion, WhatsAppMessage } from '../types';
 
@@ -6,21 +6,20 @@ class SupabaseService {
   private client: SupabaseClient;
 
   constructor() {
-    this.client = createClient(config.supabase.url, config.supabase.key);
+    // Default to anon client for normal operations
+    this.client = getAnonClient();
   }
 
-  private getServiceClient() {
-    return createClient(config.supabase.url, config.supabase.serviceRoleKey);
-  }
+  // Admin-only methods use the Admin symbol to mark privileged operations
+  private getAdminClient = () => getAdminClient();
 
   async saveMessage(message: WhatsAppMessage): Promise<void> {
-    const serviceClient = this.getServiceClient();
-    const { error } = await serviceClient
+    const { error } = await this.client
       .from('whatsapp_messages')
       .insert({
         id: message.id,
-        from: message.from,
-        to: message.to,
+        from_number: message.from,
+        to_number: message.to,
         timestamp: message.timestamp,
         message: message.message,
         type: message.type,
@@ -36,8 +35,7 @@ class SupabaseService {
   }
 
   async savePropertyListing(property: PropertyListing): Promise<void> {
-    const serviceClient = this.getServiceClient();
-    const { error } = await serviceClient
+    const { error } = await this.client
       .from('property_listings')
       .insert({
         id: property.id,
@@ -66,8 +64,7 @@ class SupabaseService {
   }
 
   async savePromotion(promotion: Promotion): Promise<void> {
-    const serviceClient = this.getServiceClient();
-    const { error } = await serviceClient
+    const { error } = await this.client
       .from('promotions')
       .insert({
         id: promotion.id,
@@ -91,8 +88,7 @@ class SupabaseService {
   }
 
   async getRecentMessages(limit: number = 100): Promise<WhatsAppMessage[]> {
-    const serviceClient = this.getServiceClient();
-    const { data, error } = await serviceClient
+    const { data, error } = await this.client
       .from('whatsapp_messages')
       .select('*')
       .order('timestamp', { ascending: false })
@@ -107,8 +103,7 @@ class SupabaseService {
   }
 
   async getUnprocessedProperties(): Promise<PropertyListing[]> {
-    const serviceClient = this.getServiceClient();
-    const { data, error } = await serviceClient
+    const { data, error } = await this.client
       .from('property_listings')
       .select('*')
       .eq('processed', false)
@@ -123,8 +118,7 @@ class SupabaseService {
   }
 
   async getUnprocessedPromotions(): Promise<Promotion[]> {
-    const serviceClient = this.getServiceClient();
-    const { data, error } = await serviceClient
+    const { data, error } = await this.client
       .from('promotions')
       .select('*')
       .eq('processed', false)
@@ -139,8 +133,7 @@ class SupabaseService {
   }
 
   async updatePropertyAsProcessed(propertyId: string): Promise<void> {
-    const serviceClient = this.getServiceClient();
-    const { error } = await serviceClient
+    const { error } = await this.client
       .from('property_listings')
       .update({ processed: true })
       .eq('id', propertyId);
@@ -152,8 +145,7 @@ class SupabaseService {
   }
 
   async updatePromotionAsProcessed(promotionId: string): Promise<void> {
-    const serviceClient = this.getServiceClient();
-    const { error } = await serviceClient
+    const { error } = await this.client
       .from('promotions')
       .update({ processed: true })
       .eq('id', promotionId);
@@ -165,8 +157,7 @@ class SupabaseService {
   }
 
   async searchSimilarProperties(query: string, limit: number = 5): Promise<PropertyListing[]> {
-    const serviceClient = this.getServiceClient();
-    const { data, error } = await serviceClient
+    const { data, error } = await this.client
       .rpc('search_similar_properties', { 
         search_query: query,
         limit_num: limit 
@@ -181,8 +172,7 @@ class SupabaseService {
   }
 
   async searchSimilarPromotions(query: string, limit: number = 5): Promise<Promotion[]> {
-    const serviceClient = this.getServiceClient();
-    const { data, error } = await serviceClient
+    const { data, error } = await this.client
       .rpc('search_similar_promotions', { 
         search_query: query,
         limit_num: limit 

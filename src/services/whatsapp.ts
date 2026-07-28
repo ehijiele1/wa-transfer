@@ -1,5 +1,6 @@
 import { Client, LocalAuth, Message as WWebMessage } from 'whatsapp-web.js';
 import { WhatsAppMessage } from '../types';
+import { getInputGuard } from './inputGuard';
 
 export class WhatsAppService {
   private client: Client | null = null;
@@ -106,6 +107,15 @@ export class WhatsAppService {
         message: await this.extractMessageContent(message),
         metadata: this.extractMetadata(message, chat),
       };
+
+      // Validate message before processing
+      const inputGuard = getInputGuard();
+      try {
+        inputGuard.validateMessage(whatsappMessage);
+      } catch (validationError: any) {
+        await inputGuard.quarantine(validationError.message, whatsappMessage);
+        return; // Skip callbacks for quarantined messages
+      }
 
       for (const callback of this.messageCallbacks) {
         callback(whatsappMessage);

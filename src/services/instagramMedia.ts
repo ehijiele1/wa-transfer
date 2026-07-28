@@ -1,13 +1,18 @@
 import instagramConfig from '../config/instagram';
 import { InstagramMedia, InstagramMediaUploadResponse } from '../types/instagram';
 import { retry } from '../utils';
+import { getUrlGuard } from './urlGuard';
 
 export class InstagramMediaService {
   private config = instagramConfig;
 
   async uploadImage(imageUrl: string, filename: string, altText?: string): Promise<InstagramMediaUploadResponse> {
     try {
-      console.log(`Downloading image from: ${imageUrl}`);
+      // Validate URL before downloading
+      const urlGuard = getUrlGuard();
+      urlGuard.validateUrl(imageUrl);
+      const safeUrlForLogging = urlGuard.sanitizeUrlForLogging(imageUrl);
+      console.log(`Downloading image from: ${safeUrlForLogging}`);
       
       // Download the image
       const imageResponse = await fetch(imageUrl);
