@@ -3,6 +3,7 @@ import { PostContent, ScheduledPost, ContentQueue, BulkPublishOptions } from '..
 import { PlatformAdapterFactory } from './platformAdapters';
 import { generateId, createExponentialBackoff } from '../utils';
 import SupabaseService from './supabase';
+import { RetryHelper } from './retryHelper';
 
 export class SocialMediaScheduler {
   private supabase: SupabaseService;
@@ -43,6 +44,15 @@ export class SocialMediaScheduler {
         throw new Error(`Content validation failed: ${validation.errors.join(', ')}`);
       }
 
+      // Generate idempotency key
+      const idempotencyKey = await this.getIdempotencyKey(content, platform);
+
+      // Check if this post already exists (idempotency)
+      const alreadyExists = await this.checkIdempotency(idempotencyKey);
+      if (alreadyExists) {
+        throw new Error(`Post with idempotency key ${idempotencyKey} already exists`);
+      }
+
       // Create scheduled post
       const scheduledPost: ScheduledPost = {
         id: generateId(),
@@ -52,6 +62,7 @@ export class SocialMediaScheduler {
         status: 'pending',
         retryCount: 0,
         maxRetries: 3,
+        idempotencyKey,
       };
 
       // Save to database
@@ -297,29 +308,146 @@ export class SocialMediaScheduler {
   }
 
   private async saveScheduledPost(post: ScheduledPost): Promise<void> {
-    // Implementation for saving to database
-    console.log(`Saving scheduled post to database: ${post.id}`);
+    return RetryHelper.withExponentialBackoff(async () => {
+      const { error } = await this.supabase.supabaseClient
+        .from('social_media_scheduled_posts')
+        .insert({
+          id: post.id,
+          platform: post.platform,
+          content_id: post.content.id,
+          scheduled_at: post.scheduledAt.toISOString(),
+          status: post.status,
+          retry_count: post.retryCount,
+          max_retries: post.maxRetries,
+          error_message: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        console.error(`Error saving scheduled post: ${error.message}`);
+        throw error;
+      }
+    }, {
+      maxAttempts: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 5000,
+      jitter: true,
+    });
   }
 
   private async updateScheduledPost(post: ScheduledPost): Promise<void> {
-    // Implementation for updating in database
-    console.log(`Updating scheduled post in database: ${post.id}`);
+    return RetryHelper.withExponentialBackoff(async () => {
+      const { error } = await this.supabase.supabaseClient
+        .from('social_media_scheduled_posts')
+        .update({
+          status: post.status,
+          retry_count: post.retryCount,
+          error_message: post.errorMessage,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', post.id);
+
+      if (error) {
+        console.error(`Error updating scheduled post: ${error.message}`);
+        throw error;
+      }
+    }, {
+      maxAttempts: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 5000,
+      jitter: true,
+    });
   }
 
   private async getPendingPosts(): Promise<ScheduledPost[]> {
-    // Implementation for getting pending posts from database
-    console.log('Getting pending posts from database');
-    return [];
+    return RetryHelper.withExponentialBackoff(async () => {
+      const { data, error } = await this.supabase.supabaseClient
+        .from('social_media_scheduled_posts')
+        .select('*')
+        .eq('status', 'pending')
+        .lte('scheduled_at', new Date().toISOString())
+        .limit(50);
+
+      if (error) {
+        console.error(`Error getting pending posts: ${error.message}`);
+        throw error;
+      }
+
+      return data?.map(row => ({
+        id: row.id,
+        platform: row.platform as 'facebook' | 'twitter' | 'linkedin',
+        content: {
+          id: row.content_id,
+          platform: row.platform,
+          type: 'text',
+          title: '',
+          content: '',
+          mediaUrls: [],
+          hashtags: [],
+          mentions: [],
+          status: 'draft',
+        },
+        scheduledAt: new Date(row.scheduled_at),
+        status: row.status,
+        retryCount: row.retry_count,
+        maxRetries: row.max_retries,
+        errorMessage: row.error_message,
+        idempotencyKey: row.idempotency_key,
+      })) || [];
+    }, {
+      maxAttempts: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 5000,
+      jitter: true,
+    });
   }
 
   private async savePublishingResult(post: ScheduledPost, result: any): Promise<void> {
-    // Implementation for saving publishing result
-    console.log(`Saving publishing result for post ${post.id}`);
+    return RetryHelper.withExponentialBackoff(async () => {
+      const { error } = await this.supabase.supabaseClient
+        .from('social_media_scheduled_posts')
+        .update({
+          status: 'published',
+          published_at: new Date().toISOString(),
+          metadata: result,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', post.id);
+
+      if (error) {
+        console.error(`Error saving publishing result: ${error.message}`);
+        throw error;
+      }
+    }, {
+      maxAttempts: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 5000,
+      jitter: true,
+    });
   }
 
   private async logPostFailure(post: ScheduledPost, error: any): Promise<void> {
-    // Implementation for logging failures
-    console.log(`Logging failure for post ${post.id}:`, error);
+    return RetryHelper.withExponentialBackoff(async () => {
+      const { error: updateError } = await this.supabase.supabaseClient
+        .from('social_media_scheduled_posts')
+        .update({
+          retry_count: post.retryCount,
+          error_message: error.message,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', post.id);
+
+      if (updateError) {
+        console.error(`Error logging post failure: ${updateError.message}`);
+        throw updateError;
+      }
+    }, {
+      maxAttempts: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 5000,
+      jitter: true,
+    });
   }
 
   private async addToQueue(post: ScheduledPost): Promise<void> {
@@ -337,13 +465,14 @@ export class SocialMediaScheduler {
   }
 
   private async saveQueue(queue: ContentQueue): Promise<void> {
-    // Implementation for saving queue to database
-    console.log(`Saving queue to database: ${queue.id}`);
+    // For now, we'll keep the queue in memory only
+    // In a production system, this would save to a content_queues table
+    console.log(`Saving queue to memory: ${queue.id}`);
   }
 
   private async updateQueue(queue: ContentQueue): Promise<void> {
-    // Implementation for updating queue in database
-    console.log(`Updating queue in database: ${queue.id}`);
+    // For now, we'll keep the queue in memory only
+    console.log(`Updating queue in memory: ${queue.id}`);
   }
 
   private async loadQueueFromDatabase(queueId: string): Promise<ContentQueue | undefined> {
@@ -402,6 +531,100 @@ export class SocialMediaScheduler {
       this.activeQueues.delete(queueId);
       console.log(`Queue cleared: ${queueId}`);
     }
+  }
+
+  /**
+   * Recover stuck jobs that were left in processing state
+   * This should be called on startup
+   */
+  async recoverStuckJobs(): Promise<void> {
+    try {
+      console.log('Recovering stuck jobs...');
+      
+      // Find posts stuck in processing for more than 5 minutes
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      
+      const { data, error } = await this.supabase.supabaseClient
+        .from('social_media_scheduled_posts')
+        .select('*')
+        .eq('status', 'processing')
+        .lt('updated_at', fiveMinutesAgo);
+
+      if (error) {
+        console.error(`Error recovering stuck jobs: ${error.message}`);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        console.log(`Found ${data.length} stuck jobs, resetting to pending`);
+        
+        for (const post of data) {
+          const { error: updateError } = await this.supabase.supabaseClient
+            .from('social_media_scheduled_posts')
+            .update({
+              status: 'pending',
+              retry_count: 0,
+              error_message: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', post.id);
+
+          if (updateError) {
+            console.error(`Error resetting stuck job ${post.id}: ${updateError.message}`);
+          } else {
+            console.log(`Reset stuck job: ${post.id}`);
+          }
+        }
+      }
+      
+      console.log('Stuck jobs recovery completed');
+    } catch (error) {
+      console.error('Error during stuck jobs recovery:', error);
+    }
+  }
+
+  /**
+   * Check if a post with the same idempotency key already exists
+   */
+  private async checkIdempotency(idempotencyKey: string): Promise<boolean> {
+    try {
+      const { data, error } = await this.supabase.supabaseClient
+        .from('social_media_scheduled_posts')
+        .select('id')
+        .eq('idempotency_key', idempotencyKey)
+        .eq('status', 'published')
+        .limit(1);
+
+      return !!(data && data.length > 0);
+    } catch (error) {
+      console.error('Error checking idempotency:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Generate or check idempotency key for a post
+   */
+  private async getIdempotencyKey(content: PostContent, platform: string): Promise<string> {
+    // For now, generate a simple hash of content + platform
+    // In production, this would be more sophisticated
+    const contentString = JSON.stringify({
+      platform,
+      type: content.type,
+      title: content.title,
+      content: content.content,
+      mediaUrls: content.mediaUrls,
+    });
+    
+    // Simple hash function
+    let hash = 0;
+    for (let i = 0; i < contentString.length; i++) {
+      const char = contentString.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    
+    return `${platform}_${Math.abs(hash)}_${Date.now()}`;
   }
 }
 

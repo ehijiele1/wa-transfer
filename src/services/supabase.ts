@@ -11,6 +11,11 @@ class SupabaseService {
     this.client = getAnonClient();
   }
 
+  // Public getter for client access
+  public get supabaseClient(): SupabaseClient {
+    return this.client;
+  }
+
   // Admin-only methods use the Admin symbol to mark privileged operations
   private getAdminClient = () => getAdminClient();
 

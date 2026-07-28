@@ -61,6 +61,8 @@ export interface ScheduledPost {
   status: 'pending' | 'processing' | 'published' | 'failed';
   retryCount: number;
   maxRetries: number;
+  idempotencyKey?: string;
+  errorMessage?: string;
 }
 
 export interface ContentQueue {
