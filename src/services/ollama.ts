@@ -1,4 +1,6 @@
 import config from '../config';
+import { getHttpClient } from './httpClient';
+import { RetryHelper } from './retryHelper';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -19,62 +21,103 @@ export interface GenerateOptions {
 class OllamaService {
   private baseUrl: string;
   private model: string;
+  private httpClient: any;
 
   constructor() {
     this.baseUrl = config.ollama.baseUrl;
     this.model = config.ollama.model;
+    this.httpClient = getHttpClient();
   }
 
   async chat(messages: ChatMessage[], options: ChatOptions = {}): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: this.model,
-        messages,
-        stream: false,
-        options: {
-          temperature: options.temperature ?? 0.7,
-        },
-        ...(options.format ? { format: options.format } : {}),
-      }),
-    });
+    return RetryHelper.withExponentialBackoff(async () => {
+      const response = await this.httpClient.fetch(`${this.baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.model,
+          messages,
+          stream: false,
+          options: {
+            temperature: options.temperature ?? 0.7,
+          },
+          ...(options.format ? { format: options.format } : {}),
+        }),
+        timeout: 30000, // 30 second timeout for Ollama
+        circuitBreaker: 'ollama',
+      });
 
-    const data: any = await response.json();
-    return data.message?.content || '';
+      if (!response.ok) {
+        throw new Error(`Ollama chat failed: ${response.statusText}`);
+      }
+
+      const data: any = await response.json();
+      return data.message?.content || '';
+    }, {
+      maxAttempts: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 10000,
+      jitter: true,
+    });
   }
 
   async generate(prompt: string, options: GenerateOptions = {}): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: this.model,
-        prompt,
-        stream: false,
-        options: {
-          temperature: options.temperature ?? 0.7,
-        },
-        ...(options.format ? { format: options.format } : {}),
-      }),
-    });
+    return RetryHelper.withExponentialBackoff(async () => {
+      const response = await this.httpClient.fetch(`${this.baseUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.model,
+          prompt,
+          stream: false,
+          options: {
+            temperature: options.temperature ?? 0.7,
+          },
+          ...(options.format ? { format: options.format } : {}),
+        }),
+        timeout: 30000, // 30 second timeout for Ollama
+        circuitBreaker: 'ollama',
+      });
 
-    const data: any = await response.json();
-    return data.response || '';
+      if (!response.ok) {
+        throw new Error(`Ollama generate failed: ${response.statusText}`);
+      }
+
+      const data: any = await response.json();
+      return data.response || '';
+    }, {
+      maxAttempts: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 10000,
+      jitter: true,
+    });
   }
 
   async embed(text: string): Promise<number[]> {
-    const response = await fetch(`${this.baseUrl}/api/embed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'nomic-embed-text',
-        input: text,
-      }),
-    });
+    return RetryHelper.withExponentialBackoff(async () => {
+      const response = await this.httpClient.fetch(`${this.baseUrl}/api/embed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'nomic-embed-text',
+          input: text,
+        }),
+        timeout: 30000, // 30 second timeout for Ollama
+        circuitBreaker: 'ollama',
+      });
 
-    const data: any = await response.json();
-    return data.embeddings?.[0] || [];
+      if (!response.ok) {
+        throw new Error(`Ollama embed failed: ${response.statusText}`);
+      }
+
+      const data: any = await response.json();
+      return data.embeddings?.[0] || [];
+    }, {
+      maxAttempts: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 10000,
+      jitter: true,
+    });
   }
 
   async generateSocialPost(listing: {

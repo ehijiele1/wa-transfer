@@ -1,6 +1,7 @@
 import { getAnonClient, getAdminClient, adminOnly, type SupabaseClient } from './supabaseClients';
 import config from '../config';
 import { PropertyListing, Promotion, WhatsAppMessage } from '../types';
+import { RetryHelper } from './retryHelper';
 
 class SupabaseService {
   private client: SupabaseClient;
@@ -14,24 +15,31 @@ class SupabaseService {
   private getAdminClient = () => getAdminClient();
 
   async saveMessage(message: WhatsAppMessage): Promise<void> {
-    const { error } = await this.client
-      .from('whatsapp_messages')
-      .insert({
-        id: message.id,
-        from_number: message.from,
-        to_number: message.to,
-        timestamp: message.timestamp,
-        message: message.message,
-        type: message.type,
-        metadata: message.metadata,
-        source_group: message.metadata?.groupMetadata?.subject || 'unknown',
-      });
+    return RetryHelper.withExponentialBackoff(async () => {
+      const { error } = await this.client
+        .from('whatsapp_messages')
+        .insert({
+          id: message.id,
+          from_number: message.from,
+          to_number: message.to,
+          timestamp: message.timestamp,
+          message: message.message,
+          type: message.type,
+          metadata: message.metadata,
+          source_group: message.metadata?.groupMetadata?.subject || 'unknown',
+        });
 
-    if (error) {
-      if (error.code === 'PGRST205') return;
-      console.error('Error saving message:', error);
-      throw error;
-    }
+      if (error) {
+        if (error.code === 'PGRST205') return;
+        console.error('Error saving message:', error);
+        throw error;
+      }
+    }, {
+      maxAttempts: 3,
+      baseDelayMs: 1000,
+      maxDelayMs: 5000,
+      jitter: true,
+    });
   }
 
   async savePropertyListing(property: PropertyListing): Promise<void> {
