@@ -10,10 +10,22 @@
     "watch": "tsc -w",
     "test": "node test-system.js",
     "smoke": "node scripts/smoke.ts",
-    "test:unit": "echo \"Unit tests not implemented yet\" && exit 0",
-    "test:integration": "node test-system.js",
-    "lint": "echo \"Linting not implemented yet\" && exit 0",
-    "typecheck": "tsc --noEmit"
+    "test:unit": "jest --testPathPattern=test/**/*.test.ts",
+    "test:integration": "jest --testPathPattern=test/integration/**/*.test.ts",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:all": "node scripts/test-runner.js all",
+    "test:comprehensive": "node scripts/test-runner.js all",
+    "test:quick": "node scripts/test-runner.js unit smoke",
+    "test:ci": "node scripts/test-runner.js unit integration smoke coverage lint typecheck",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "typecheck": "tsc --noEmit",
+    "typecheck:watch": "tsc --noEmit --watch",
+    "validate": "npm run typecheck && npm run lint && npm run test:quick",
+    "validate:ci": "npm run typecheck && npm run lint && npm run test:ci",
+    "clean": "rimraf dist coverage temp",
+    "prepare": "npm run clean && npm run build"
   },
   "keywords": ["whatsapp", "automation", "social-media", "real-estate", "bi"],
   "author": "",
@@ -39,6 +51,13 @@
     "typescript": "^5.3.3",
     "ts-node": "^10.9.2",
     "@types/node": "^20.10.5",
-    "@types/node-cron": "^3.0.11"
+    "@types/node-cron": "^3.0.11",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.8",
+    "ts-jest": "^29.1.1",
+    "eslint": "^8.55.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.1",
+    "@typescript-eslint/parser": "^6.13.1",
+    "rimraf": "^5.0.5"
   }
 }

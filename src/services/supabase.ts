@@ -130,6 +130,21 @@ class SupabaseService {
     return data || [];
   }
 
+  async getPropertyById(propertyId: string): Promise<PropertyListing> {
+    const { data, error } = await this.client
+      .from('property_listings')
+      .select('*')
+      .eq('id', propertyId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching property by ID:', error);
+      throw error;
+    }
+
+    return data;
+  }
+
   async getUnprocessedPromotions(): Promise<Promotion[]> {
     const { data, error } = await this.client
       .from('promotions')
