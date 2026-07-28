@@ -1,20 +1,19 @@
 import { WhatsAppMessage } from '../types';
 export declare class WhatsAppService {
-    private socket;
-    private supabase;
+    private client;
     private messageCallbacks;
     private reconnectAttempts;
     private maxReconnectAttempts;
+    private retryDelayMs;
+    private readyTime;
+    private tableMissingLogged;
     constructor();
     connect(): Promise<void>;
-    private loadAuthState;
     private setupEventHandlers;
     private processMessage;
     private getMessageType;
     private extractMessageContent;
     private extractMetadata;
-    private monitorGroups;
-    private saveAuthState;
     onMessage(callback: (message: WhatsAppMessage) => void): void;
     disconnect(): Promise<void>;
 }

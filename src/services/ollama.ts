@@ -40,7 +40,7 @@ class OllamaService {
       }),
     });
 
-    const data = await response.json();
+    const data: any = await response.json();
     return data.message?.content || '';
   }
 
@@ -59,7 +59,7 @@ class OllamaService {
       }),
     });
 
-    const data = await response.json();
+    const data: any = await response.json();
     return data.response || '';
   }
 
@@ -73,7 +73,7 @@ class OllamaService {
       }),
     });
 
-    const data = await response.json();
+    const data: any = await response.json();
     return data.embeddings?.[0] || [];
   }
 

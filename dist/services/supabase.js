@@ -28,6 +28,8 @@ class SupabaseService {
             source_group: message.metadata?.groupMetadata?.subject || 'unknown',
         });
         if (error) {
+            if (error.code === 'PGRST205')
+                return;
             console.error('Error saving message:', error);
             throw error;
         }
@@ -55,6 +57,8 @@ class SupabaseService {
             embeddings: property.embeddings,
         });
         if (error) {
+            if (error.code === 'PGRST205')
+                return;
             console.error('Error saving property listing:', error);
             throw error;
         }
@@ -77,6 +81,8 @@ class SupabaseService {
             embeddings: promotion.embeddings,
         });
         if (error) {
+            if (error.code === 'PGRST205')
+                return;
             console.error('Error saving promotion:', error);
             throw error;
         }

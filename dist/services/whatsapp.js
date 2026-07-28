@@ -1,32 +1,36 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WhatsAppService = void 0;
-const baileys_1 = require("baileys");
-const config_1 = __importDefault(require("../config"));
-const supabase_1 = __importDefault(require("./supabase"));
+const whatsapp_web_js_1 = require("whatsapp-web.js");
 class WhatsAppService {
-    socket;
-    supabase;
+    client = null;
     messageCallbacks = [];
     reconnectAttempts = 0;
-    maxReconnectAttempts = config_1.default.whatsapp.maxRetries;
-    constructor() {
-        this.supabase = new supabase_1.default();
-    }
+    maxReconnectAttempts = 3;
+    retryDelayMs = 5000;
+    readyTime = 0;
+    tableMissingLogged = false;
+    constructor() { }
     async connect() {
         try {
-            const authState = this.loadAuthState();
-            const saveState = this.saveAuthState;
-            this.socket = (0, baileys_1.makeWASocket)({
-                auth: authState,
-                printQRInTerminal: true,
-                browser: ['WhatsApp Business Intelligence', 'Chrome', '4.0.0'],
+            this.client = new whatsapp_web_js_1.Client({
+                authStrategy: new whatsapp_web_js_1.LocalAuth({
+                    clientId: 'wa-transfer',
+                    dataPath: './wwebjs-auth',
+                }),
+                puppeteer: {
+                    args: [
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-gpu',
+                        '--user-data-dir=/tmp/chrome-profile',
+                    ],
+                    headless: true,
+                },
             });
             this.setupEventHandlers();
-            this.saveAuthState = saveState;
+            await this.client.initialize();
             console.log('WhatsApp client connected successfully');
         }
         catch (error) {
@@ -34,147 +38,130 @@ class WhatsAppService {
             throw error;
         }
     }
-    loadAuthState() {
-        try {
-            const fs = require('fs');
-            const path = require('path');
-            const credsPath = path.join(`creds/${config_1.default.whatsapp.sessionId}-creds.json`);
-            if (fs.existsSync(credsPath)) {
-                return JSON.parse(fs.readFileSync(credsPath, 'utf8'));
-            }
-        }
-        catch (error) {
-            console.log('No existing auth state found, will generate new one');
-        }
-        return {};
-    }
     setupEventHandlers() {
-        this.socket.ev.on('connection.update', (update) => {
-            const { connection, lastDisconnect, qr } = update;
-            if (qr) {
-                console.log('QR Code generated - scan with WhatsApp Web');
-            }
-            if (connection === 'close') {
-                const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== baileys_1.DisconnectReason.loggedOut;
-                if (shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
-                    this.reconnectAttempts++;
-                    console.log(`Connection closed, attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-                    setTimeout(() => this.connect(), config_1.default.whatsapp.retryDelayMs);
+        if (!this.client)
+            return;
+        this.client.on('qr', (qr) => {
+            console.log('QR Code generated - scan with WhatsApp Web');
+        });
+        this.client.on('authenticated', () => {
+            console.log('WhatsApp authenticated');
+        });
+        this.client.on('auth_failure', (msg) => {
+            console.error('WhatsApp auth failure:', msg);
+        });
+        this.client.on('ready', async () => {
+            this.readyTime = Date.now();
+            this.reconnectAttempts = 0;
+            console.log('WhatsApp connection established');
+            setTimeout(async () => {
+                try {
+                    const chats = await this.client.getChats();
+                    const groups = chats.filter(c => c.isGroup);
+                    console.log('=== AVAILABLE GROUPS (' + groups.length + ') ===');
+                    for (const g of groups) {
+                        console.log(g.name + ': ' + g.id._serialized);
+                    }
+                    console.log('=== END GROUPS ===');
                 }
-                else {
-                    console.error('Max reconnection attempts reached or logged out');
+                catch (e) {
+                    console.log('Group listing unavailable: ' + e.message);
                 }
+            }, 15000);
+        });
+        this.client.on('disconnected', async (reason) => {
+            console.log('WhatsApp disconnected:', reason);
+            if (reason !== 'LOGGED_OUT' && this.reconnectAttempts < this.maxReconnectAttempts) {
+                this.reconnectAttempts++;
+                console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+                setTimeout(() => this.connect(), this.retryDelayMs);
             }
-            else if (connection === 'open') {
-                this.reconnectAttempts = 0;
-                console.log('WhatsApp connection established');
-                this.monitorGroups();
+            else {
+                console.error('Max reconnection attempts reached or logged out');
             }
         });
-        this.socket.ev.on('messages.upsert', (messageUpdate) => {
-            const messages = messageUpdate.messages;
-            for (const message of messages) {
-                this.processMessage(message);
-            }
+        this.client.on('message_create', async (message) => {
+            if (message.fromMe)
+                return;
+            if (this.readyTime > 0 && message.timestamp * 1000 < this.readyTime - 5000)
+                return;
+            await this.processMessage(message);
         });
     }
     async processMessage(message) {
         try {
+            const chat = await message.getChat();
             const whatsappMessage = {
-                id: message.key.id,
-                from: message.key.remoteJid,
-                to: message.key.fromMe ? message.key.remoteJid : 'me',
-                timestamp: message.messageTimestamp,
+                id: message.id._serialized,
+                from: message.from,
+                to: message.author || message.from,
+                timestamp: message.timestamp,
                 type: this.getMessageType(message),
-                message: this.extractMessageContent(message),
-                metadata: this.extractMetadata(message),
+                message: await this.extractMessageContent(message),
+                metadata: this.extractMetadata(message, chat),
             };
-            await this.supabase.saveMessage(whatsappMessage);
             for (const callback of this.messageCallbacks) {
                 callback(whatsappMessage);
             }
         }
         catch (error) {
+            if (error?.message?.includes('Target closed'))
+                return;
             console.error('Error processing message:', error);
         }
     }
     getMessageType(message) {
-        if (message.message?.conversation)
-            return 'text';
-        if (message.message?.imageMessage)
-            return 'image';
-        if (message.message?.videoMessage)
-            return 'video';
-        if (message.message?.documentMessage)
-            return 'document';
+        if (message.hasMedia) {
+            if (message.type === 'image')
+                return 'image';
+            if (message.type === 'video')
+                return 'video';
+            if (message.type === 'document')
+                return 'document';
+        }
         return 'text';
     }
-    extractMessageContent(message) {
-        if (message.message?.conversation) {
-            return { conversation: message.message.conversation };
+    async extractMessageContent(message) {
+        if (message.hasMedia) {
+            try {
+                const media = await message.downloadMedia();
+                return {
+                    [`${message.type}Message`]: {
+                        caption: message.body || '',
+                        url: media.data,
+                        mimetype: media.mimetype,
+                        filename: media.filename,
+                    },
+                };
+            }
+            catch {
+                return {};
+            }
         }
-        if (message.message?.imageMessage) {
-            return {
-                imageMessage: {
-                    caption: message.message.imageMessage.caption,
-                    url: message.message.imageMessage.url,
-                }
-            };
-        }
-        if (message.message?.videoMessage) {
-            return {
-                videoMessage: {
-                    caption: message.message.videoMessage.caption,
-                    url: message.message.videoMessage.url,
-                }
-            };
-        }
-        if (message.message?.documentMessage) {
-            return {
-                documentMessage: {
-                    caption: message.message.documentMessage.caption,
-                    url: message.message.documentMessage.url,
-                }
-            };
+        if (message.body) {
+            return { conversation: message.body };
         }
         return {};
     }
-    extractMetadata(message) {
+    extractMetadata(message, chat) {
         const metadata = {};
-        if (message.key.remoteJid.includes('@g.us')) {
+        if (message.from.endsWith('@g.us')) {
             metadata.groupMetadata = {
-                subject: message.message?.groupMetadata?.subject || 'Unknown Group',
-                description: message.message?.groupMetadata?.description || '',
-                participants: message.message?.groupMetadata?.participants || [],
+                subject: chat.name || 'Unknown Group',
+                description: chat.description || '',
+                participants: [],
             };
         }
         return metadata;
     }
-    async monitorGroups() {
-        try {
-            const groups = config_1.default.monitoring.groups;
-            for (const group of groups) {
-                try {
-                    const groupInfo = await this.socket.groupMetadata(group);
-                    console.log(`Monitoring group: ${groupInfo.subject} (${group})`);
-                }
-                catch (error) {
-                    console.error(`Failed to get group info for ${group}:`, error);
-                }
-            }
-        }
-        catch (error) {
-            console.error('Error monitoring groups:', error);
-        }
-    }
-    saveAuthState = () => { };
     onMessage(callback) {
         this.messageCallbacks.push(callback);
     }
     async disconnect() {
-        if (this.socket) {
-            await this.socket.logout();
-            this.socket.ev.removeAllListeners();
+        if (this.client) {
+            this.client.removeAllListeners();
+            await this.client.destroy();
+            this.client = null;
             console.log('WhatsApp client disconnected');
         }
     }

@@ -3,18 +3,19 @@
   "version": "1.0.0",
   "description": "WhatsApp Business Intelligence & Social Media Automation System",
   "main": "dist/index.js",
-  "scripts": {
+"scripts": {
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "build": "tsc",
     "watch": "tsc -w",
     "test": "node test-system.js",
+    "smoke": "node scripts/smoke.ts",
     "test:unit": "echo \"Unit tests not implemented yet\" && exit 0",
     "test:integration": "node test-system.js",
     "lint": "echo \"Linting not implemented yet\" && exit 0",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["whatsapp", "baileys", "automation", "social-media", "real-estate", "bi"],
+  "keywords": ["whatsapp", "automation", "social-media", "real-estate", "bi"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
@@ -29,6 +30,10 @@
     "qrcode": "^1.5.4",
     "whatsapp-web.js": "^1.26.0",
     "puppeteer": "^23.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   },
   "devDependencies": {
     "typescript": "^5.3.3",
