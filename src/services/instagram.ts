@@ -5,6 +5,7 @@ import { PropertyListing } from '../types';
 import InstagramMediaService from './instagramMedia';
 import InstagramCarouselGenerator from './instagramCarouselGenerator';
 import { generateId, formatDate } from '../utils';
+import { logger } from '../utils/logger';
 
 class InstagramService {
   private client: SupabaseClient;
@@ -40,7 +41,7 @@ class InstagramService {
       });
 
     if (error) {
-      console.error('Error saving carousel:', error);
+      logger.error('Error saving carousel', error);
       throw error;
     }
   }
@@ -54,7 +55,7 @@ class InstagramService {
       .single();
 
     if (error) {
-      console.error('Error fetching carousel:', error);
+      logger.error('Error fetching carousel', error);
       throw error;
     }
 
@@ -70,7 +71,7 @@ class InstagramService {
       .limit(10);
 
     if (error) {
-      console.error('Error fetching draft carousels:', error);
+      logger.error('Error fetching draft carousels', error);
       throw error;
     }
 
@@ -87,7 +88,7 @@ class InstagramService {
       .limit(20);
 
     if (error) {
-      console.error('Error fetching published carousels:', error);
+      logger.error('Error fetching published carousels', error);
       throw error;
     }
 
@@ -104,7 +105,7 @@ class InstagramService {
       .limit(5);
 
     if (error) {
-      console.error('Error fetching unpublished properties:', error);
+      logger.error('Error fetching unpublished properties', error);
       throw error;
     }
 
@@ -131,10 +132,10 @@ class InstagramService {
       // Save to database
       await this.saveCarousel(carousel);
       
-      console.log(`Generated carousel for property ${propertyId}: ${carousel.id}`);
+      logger.info(`Generated carousel for property ${propertyId}`, { carouselId: carousel.id });
       return carousel;
     } catch (error) {
-      console.error('Error generating carousel for property:', error);
+      logger.error('Error generating carousel for property', error, { propertyId });
       throw error;
     }
   }
@@ -148,7 +149,7 @@ class InstagramService {
         throw new Error(`Carousel not found: ${carouselId}`);
       }
 
-      console.log(`Publishing carousel: ${carouselId}`);
+      logger.info(`Publishing carousel`, { carouselId });
       
       // Publish to Instagram
       const postResponse = await this.carouselGenerator.publishCarousel(carousel);
@@ -166,7 +167,7 @@ class InstagramService {
         .eq('id', carouselId);
 
       if (error) {
-        console.error('Error updating carousel status:', error);
+        logger.error('Error updating carousel status', error, { carouselId });
         throw error;
       }
 
@@ -176,10 +177,10 @@ class InstagramService {
         .update({ instagram_published: true })
         .eq('id', carousel.property_id);
 
-      console.log(`Carousel published successfully: ${postResponse.permalink}`);
+      logger.info('Carousel published successfully', { carouselId, permalink: postResponse.permalink });
       return postResponse;
     } catch (error) {
-      console.error('Error publishing carousel:', error);
+      logger.error('Error publishing carousel', error, { carouselId });
       throw error;
     }
   }
@@ -193,7 +194,7 @@ class InstagramService {
         throw new Error(`Carousel not found: ${carouselId}`);
       }
 
-      console.log(`Scheduling carousel: ${carouselId} for ${scheduledDate.toISOString()}`);
+      logger.info(`Scheduling carousel`, { carouselId, scheduledDate: scheduledDate.toISOString() });
       
       // Schedule with Instagram
       const scheduleResponse = await this.carouselGenerator.scheduleCarousel(carousel, scheduledDate);
@@ -209,14 +210,14 @@ class InstagramService {
         .eq('id', carouselId);
 
       if (error) {
-        console.error('Error updating carousel schedule:', error);
+        logger.error('Error updating carousel schedule', error, { carouselId });
         throw error;
       }
 
-      console.log(`Carousel scheduled successfully for ${formatDate(scheduledDate)}`);
+      logger.info('Carousel scheduled successfully', { carouselId, formattedDate: formatDate(scheduledDate) });
       return scheduleResponse;
     } catch (error) {
-      console.error('Error scheduling carousel:', error);
+      logger.error('Error scheduling carousel', error, { carouselId });
       throw error;
     }
   }
@@ -226,11 +227,11 @@ class InstagramService {
       const unpublishedProperties = await this.getUnpublishedProperties();
       const publishedPosts: InstagramPostResponse[] = [];
       
-      console.log(`Found ${unpublishedProperties.length} unpublished properties`);
+      logger.info(`Found ${unpublishedProperties.length} unpublished properties`);
       
       for (const property of unpublishedProperties) {
         try {
-          console.log(`Processing property: ${property.title}`);
+          logger.info(`Processing property`, { propertyId: property.id, title: property.title });
           
           // Generate carousel
           const carousel = await this.generateCarouselForProperty(property.id);
@@ -244,15 +245,15 @@ class InstagramService {
           await new Promise(resolve => setTimeout(resolve, 5000));
           
         } catch (error) {
-          console.error(`Error processing property ${property.id}:`, error);
+          logger.error(`Error processing property`, error, { propertyId: property.id });
           // Continue with next property
         }
       }
       
-      console.log(`Successfully published ${publishedPosts.length} carousels`);
+      logger.info(`Successfully published carousels`, { count: publishedPosts.length });
       return publishedPosts;
     } catch (error) {
-      console.error('Error in batch publish:', error);
+      logger.error('Error in batch publish', error);
       throw error;
     }
   }
@@ -294,7 +295,7 @@ class InstagramService {
         recent_posts: recentPosts || [],
       };
     } catch (error) {
-      console.error('Error getting analytics:', error);
+      logger.error('Error getting analytics', error);
       throw error;
     }
   }
@@ -308,13 +309,13 @@ class InstagramService {
         .eq('id', carouselId);
 
       if (error) {
-        console.error('Error deleting carousel:', error);
+        logger.error('Error deleting carousel', error, { carouselId });
         throw error;
       }
 
-      console.log(`Carousel deleted: ${carouselId}`);
+      logger.info('Carousel deleted', { carouselId });
     } catch (error) {
-      console.error('Error deleting carousel:', error);
+      logger.error('Error deleting carousel', error, { carouselId });
       throw error;
     }
   }

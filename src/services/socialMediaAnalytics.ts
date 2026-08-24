@@ -3,6 +3,7 @@ import { AnalyticsData, PostContent } from '../types/socialMedia';
 import { PlatformAdapterFactory } from './platformAdapters';
 import SupabaseService from './supabase';
 import { generateId } from '../utils';
+import { logger } from '../utils/logger';
 
 export class SocialMediaAnalytics {
   private supabase: SupabaseService;
@@ -13,7 +14,7 @@ export class SocialMediaAnalytics {
 
   async getPlatformAnalytics(platform: 'facebook' | 'twitter' | 'linkedin' | 'all', dateRange: { start: Date; end: Date }): Promise<AnalyticsData[]> {
     try {
-      console.log(`Getting analytics for ${platform} from ${dateRange.start.toISOString()} to ${dateRange.end.toISOString()}`);
+      logger.info(`Getting analytics`, { platform, start: dateRange.start.toISOString(), end: dateRange.end.toISOString() });
 
       const analyticsData: AnalyticsData[] = [];
 
@@ -35,7 +36,7 @@ export class SocialMediaAnalytics {
 
       return analyticsData;
     } catch (error) {
-      console.error('Error getting platform analytics:', error);
+      logger.error('Error getting platform analytics', error as Error);
       throw error;
     }
   }
@@ -66,14 +67,14 @@ export class SocialMediaAnalytics {
 
       return analytics;
     } catch (error) {
-      console.error(`Error getting analytics for ${platform}:`, error);
+      logger.error(`Error getting analytics`, error as Error, { platform, dateRange });
       return null;
     }
   }
 
   async getCrossPlatformAnalytics(dateRange: { start: Date; end: Date }): Promise<any> {
     try {
-      console.log('Getting cross-platform analytics...');
+      logger.info('Getting cross-platform analytics', { dateRange });
 
       const allAnalytics = await this.getPlatformAnalytics('all', dateRange);
 
@@ -101,14 +102,14 @@ export class SocialMediaAnalytics {
 
       return aggregatedMetrics;
     } catch (error) {
-      console.error('Error getting cross-platform analytics:', error);
+      logger.error('Error getting cross-platform analytics', error as Error);
       throw error;
     }
   }
 
   async getRealTimeMetrics(platform?: 'facebook' | 'twitter' | 'linkedin'): Promise<any> {
     try {
-      console.log('Getting real-time metrics...');
+      logger.info('Getting real-time metrics', { ...(platform ? { platform } : {}) });
 
       const now = new Date();
       const last24Hours = {
@@ -134,14 +135,14 @@ export class SocialMediaAnalytics {
         };
       }
     } catch (error) {
-      console.error('Error getting real-time metrics:', error);
+      logger.error('Error getting real-time metrics', error as Error);
       throw error;
     }
   }
 
   async getContentPerformance(dateRange: { start: Date; end: Date }): Promise<any> {
     try {
-      console.log('Getting content performance analysis...');
+      logger.info('Getting content performance analysis', { dateRange });
 
       // Get content from database
       const contentData = await this.getContentDataFromDatabase(dateRange);
@@ -170,14 +171,14 @@ export class SocialMediaAnalytics {
 
       return performance;
     } catch (error) {
-      console.error('Error getting content performance:', error);
+      logger.error('Error getting content performance', error as Error);
       throw error;
     }
   }
 
   async getAudienceInsights(dateRange: { start: Date; end: Date }): Promise<any> {
     try {
-      console.log('Getting audience insights...');
+      logger.info('Getting audience insights', { dateRange });
 
       const audienceData = await this.getAudienceDataFromDatabase(dateRange);
 
@@ -200,14 +201,14 @@ export class SocialMediaAnalytics {
 
       return insights;
     } catch (error) {
-      console.error('Error getting audience insights:', error);
+      logger.error('Error getting audience insights', error as Error);
       throw error;
     }
   }
 
   async generatePerformanceReport(dateRange: { start: Date; end: Date }): Promise<string> {
     try {
-      console.log('Generating performance report...');
+      logger.info('Generating performance report', { dateRange });
 
       const analytics = await this.getCrossPlatformAnalytics(dateRange);
       const contentPerformance = await this.getContentPerformance(dateRange);
@@ -268,7 +269,7 @@ ${contentPerformance.postingTimes.slice(0, 3).map((time: any, index: number) =>
 
       return report;
     } catch (error) {
-      console.error('Error generating performance report:', error);
+      logger.error('Error generating performance report', error as Error);
       throw error;
     }
   }

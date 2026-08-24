@@ -1,6 +1,9 @@
 import socialMediaConfig from '../config/socialMedia';
 import { PostContent, ScheduledPost, PlatformAdapter } from '../types/socialMedia';
 import { generateId, createExponentialBackoff } from '../utils';
+import { logger } from '../utils/logger';
+import { fetchWithTimeout } from '../utils/fetchWithTimeout';
+import { facebookCircuitBreaker, twitterCircuitBreaker, linkedinCircuitBreaker } from '../utils/circuitBreaker';
 
 export abstract class BasePlatformAdapter implements PlatformAdapter {
   public config: any;
@@ -63,7 +66,7 @@ export abstract class BasePlatformAdapter implements PlatformAdapter {
   }
 
   protected async handleError(error: any, operation: string): Promise<never> {
-    console.error(`Error in ${operation} for ${this.platform}:`, error);
+    logger.error(`Error in ${operation} for ${this.platform}`, error);
     
     // Retry logic for common errors
     if (error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
@@ -101,7 +104,7 @@ export class FacebookAdapter extends BasePlatformAdapter {
           const mediaId = await this.uploadMedia(mediaUrl, `facebook_${Date.now()}.jpg`);
           mediaAttachments.push(mediaId);
         } catch (error) {
-          console.warn(`Failed to upload media ${mediaUrl}:`, error);
+          logger.warn(`Failed to upload media ${mediaUrl}`, { error, platform: this.platform });
         }
       }
 
@@ -115,17 +118,22 @@ export class FacebookAdapter extends BasePlatformAdapter {
         postData.attached_media = mediaAttachments.map(id => ({ media_fbid: id }));
       }
 
-      const response = await fetch(
-        `https://graph.facebook.com/${this.config.graphApiVersion}/${this.config.pageId}/feed`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.config.accessToken}`,
-            'Content-Type': 'application/json',
+      logger.debug('Publishing to Facebook', { platform: this.platform, contentLength: formattedContent.length });
+      
+      const response = await facebookCircuitBreaker.execute(async () => {
+        return await fetchWithTimeout(
+          `https://graph.facebook.com/${this.config.graphApiVersion}/${this.config.pageId}/feed`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${this.config.accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(postData),
           },
-          body: JSON.stringify(postData),
-        }
-      );
+          20000
+        );
+      });
 
       if (!response.ok) {
         const errorData: unknown = await response.json();
@@ -134,6 +142,8 @@ export class FacebookAdapter extends BasePlatformAdapter {
       }
 
       const result: unknown = await response.json();
+      logger.info('Published to Facebook', { platform: this.platform, postId: (result as any).id });
+      
       return {
         postId: (result as any).id,
         url: `https://facebook.com/${this.config.pageId}/posts/${(result as any).id}`,
@@ -160,17 +170,20 @@ export class FacebookAdapter extends BasePlatformAdapter {
         scheduled_publish_time: Math.floor(scheduledAt.getTime() / 1000),
       };
 
-      const response = await fetch(
-        `https://graph.facebook.com/${this.config.graphApiVersion}/${this.config.pageId}/feed`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.config.accessToken}`,
-            'Content-Type': 'application/json',
+      const response = await facebookCircuitBreaker.execute(async () => {
+        return await fetchWithTimeout(
+          `https://graph.facebook.com/${this.config.graphApiVersion}/${this.config.pageId}/feed`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${this.config.accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(postData),
           },
-          body: JSON.stringify(postData),
-        }
-      );
+          20000
+        );
+      });
 
       if (!response.ok) {
         const errorData: unknown = await response.json();
@@ -191,15 +204,18 @@ export class FacebookAdapter extends BasePlatformAdapter {
 
   async getPostMetrics(postId: string): Promise<any> {
     try {
-      const response = await fetch(
-        `https://graph.facebook.com/${this.config.graphApiVersion}/${postId}/insights`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${this.config.accessToken}`,
+      const response = await facebookCircuitBreaker.execute(async () => {
+        return await fetchWithTimeout(
+          `https://graph.facebook.com/${this.config.graphApiVersion}/${postId}/insights`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${this.config.accessToken}`,
+            },
           },
-        }
-      );
+          15000
+        );
+      });
 
       if (!response.ok) {
         throw new Error(`Failed to get post metrics: ${response.statusText}`);
@@ -218,15 +234,18 @@ export class FacebookAdapter extends BasePlatformAdapter {
 
   async getAnalytics(dateRange: { start: Date; end: Date }): Promise<any> {
     try {
-      const response = await fetch(
-        `https://graph.facebook.com/${this.config.graphApiVersion}/${this.config.pageId}/insights`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${this.config.accessToken}`,
+      const response = await facebookCircuitBreaker.execute(async () => {
+        return await fetchWithTimeout(
+          `https://graph.facebook.com/${this.config.graphApiVersion}/${this.config.pageId}/insights`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${this.config.accessToken}`,
+            },
           },
-        }
-      );
+          15000
+        );
+      });
 
       if (!response.ok) {
         throw new Error(`Failed to get analytics: ${response.statusText}`);
@@ -294,15 +313,17 @@ export class TwitterAdapter extends BasePlatformAdapter {
       const formattedContent = this.formatContent(content);
 
       // Twitter API v2 endpoint for creating tweet
-      const response = await fetch('https://api.twitter.com/2/tweets', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.config.bearerToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: formattedContent,
-        }),
+      const response = await twitterCircuitBreaker.execute(async () => {
+        return await fetchWithTimeout('https://api.twitter.com/2/tweets', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.config.bearerToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: formattedContent,
+          }),
+        }, 15000);
       });
 
       if (!response.ok) {
@@ -347,11 +368,13 @@ export class TwitterAdapter extends BasePlatformAdapter {
 
   async getPostMetrics(tweetId: string): Promise<any> {
     try {
-      const response = await fetch(`https://api.twitter.com/2/tweets/${tweetId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${this.config.bearerToken}`,
-        },
+      const response = await twitterCircuitBreaker.execute(async () => {
+        return await fetchWithTimeout(`https://api.twitter.com/2/tweets/${tweetId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${this.config.bearerToken}`,
+          },
+        }, 15000);
       });
 
       if (!response.ok) {
@@ -406,28 +429,30 @@ export class LinkedInAdapter extends BasePlatformAdapter {
       const formattedContent = this.formatContent(content);
 
       // LinkedIn API endpoint for creating post
-      const response = await fetch('https://api.linkedin.com/v2/ugcPosts', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.config.accessToken}`,
-          'Content-Type': 'application/json',
-          'X-Restli-Protocol-Version': '2.0.0',
-        },
-        body: JSON.stringify({
-          author: `urn:li:person:${this.config.pageId}`,
-          lifecycleState: 'PUBLISHED',
-          specificContent: {
-            'com.linkedin.ugc.ShareContent': {
-              shareCommentary: {
-                text: formattedContent,
+      const response = await linkedinCircuitBreaker.execute(async () => {
+        return await fetchWithTimeout('https://api.linkedin.com/v2/ugcPosts', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.config.accessToken}`,
+            'Content-Type': 'application/json',
+            'X-Restli-Protocol-Version': '2.0.0',
+          },
+          body: JSON.stringify({
+            author: `urn:li:person:${this.config.pageId}`,
+            lifecycleState: 'PUBLISHED',
+            specificContent: {
+              'com.linkedin.ugc.ShareContent': {
+                shareCommentary: {
+                  text: formattedContent,
+                },
+                shareMediaCategory: 'NONE',
               },
-              shareMediaCategory: 'NONE',
             },
-          },
-          visibility: {
-            'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
-          },
-        }),
+            visibility: {
+              'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
+            },
+          }),
+        }, 15000);
       });
 
       if (!response.ok) {
@@ -472,11 +497,13 @@ export class LinkedInAdapter extends BasePlatformAdapter {
   async getPostMetrics(postId: string): Promise<any> {
     try {
       // LinkedIn API for getting post metrics
-      const response = await fetch(`https://api.linkedin.com/v2/activities/${postId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${this.config.accessToken}`,
-        },
+      const response = await linkedinCircuitBreaker.execute(async () => {
+        return await fetchWithTimeout(`https://api.linkedin.com/v2/activities/${postId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${this.config.accessToken}`,
+          },
+        }, 15000);
       });
 
       if (!response.ok) {
@@ -497,15 +524,18 @@ export class LinkedInAdapter extends BasePlatformAdapter {
   async getAnalytics(dateRange: { start: Date; end: Date }): Promise<any> {
     try {
       // LinkedIn API for organization analytics
-      const response = await fetch(
-        `https://api.linkedin.com/v2/organizationAnalytics?q=organizationalUpdateAnalytics&start=${Math.floor(dateRange.start.getTime() / 1000)}&end=${Math.floor(dateRange.end.getTime() / 1000)}`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${this.config.accessToken}`,
+      const response = await linkedinCircuitBreaker.execute(async () => {
+        return await fetchWithTimeout(
+          `https://api.linkedin.com/v2/organizationAnalytics?q=organizationalUpdateAnalytics&start=${Math.floor(dateRange.start.getTime() / 1000)}&end=${Math.floor(dateRange.end.getTime() / 1000)}`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${this.config.accessToken}`,
+            },
           },
-        }
-      );
+          15000
+        );
+      });
 
       if (!response.ok) {
         throw new Error(`Failed to get analytics: ${response.statusText}`);

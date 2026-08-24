@@ -57,6 +57,9 @@ export class ContentGenerationJob {
           
           // Generate carousel
           const propertyData = await this.supabaseService.getPropertyById(property.id);
+          if (!propertyData) {
+            throw new Error(`Property ${property.id} not found`);
+          }
           const carousel = await this.instagramCarouselGenerator.generateCarousel(propertyData);
           if (!carousel) {
             throw new Error(`Failed to generate carousel for property ${property.id}`);
@@ -94,6 +97,9 @@ export class ContentGenerationJob {
       console.log(`🎨 Generating Instagram carousel for property ${propertyId}...`);
       
       const propertyData = await this.supabaseService.getPropertyById(propertyId);
+      if (!propertyData) {
+        return { success: false, error: `Property ${propertyId} not found` };
+      }
       const carousel = await this.instagramCarouselGenerator.generateCarousel(propertyData);
       if (!carousel) {
         throw new Error(`Failed to generate carousel for property ${propertyId}`);

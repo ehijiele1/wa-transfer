@@ -1,5 +1,8 @@
 import { WhatsAppMessage } from '../types';
 import SupabaseService from './supabase';
+import { logger } from '../utils/logger';
+import { fetchWithTimeout } from '../utils/fetchWithTimeout';
+import { inputValidator } from '../utils/inputValidator';
 
 export interface MessageClassification {
   type: 'property' | 'promotion' | 'conversation' | 'unknown';
@@ -22,6 +25,33 @@ export class MessageProcessor {
         type: 'unknown',
         confidence: 0.1,
       };
+    }
+
+    // Validate input before processing
+    const validation = inputValidator.validateText(text);
+    if (!validation.valid) {
+      logger.warn('Message validation failed', { 
+        errors: validation.errors,
+        messageId: message.id 
+      });
+      return {
+        type: 'unknown',
+        confidence: 0.1,
+        extractedData: { validationErrors: validation.errors }
+      };
+    }
+
+    // Validate media URLs if present
+    if (message.message?.imageMessage?.url) {
+      try {
+        inputValidator.validateUrl(message.message.imageMessage.url);
+      } catch (error) {
+        logger.warn('Media URL validation failed', { 
+          error, 
+          messageId: message.id 
+        });
+        // Continue processing but log the warning
+      }
     }
 
     const classification = await this.classifyWithOllama(text);
@@ -68,7 +98,9 @@ export class MessageProcessor {
 
   private async classifyWithOllama(text: string): Promise<MessageClassification> {
     try {
-      const response = await fetch(`${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/generate`, {
+      const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+      
+      const response = await fetchWithTimeout(`${ollamaUrl}/api/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -97,7 +129,7 @@ Example outputs:
 {"type": "unknown", "confidence": 0.2, "reason": "Unclear message with no clear purpose"}`,
           stream: false,
         }),
-      });
+      }, 30000);
 
       if (!response.ok) {
         throw new Error(`Ollama request failed: ${response.statusText}`);
@@ -113,14 +145,14 @@ Example outputs:
           confidence: classification.confidence,
         };
       } catch (parseError) {
-        console.error('Failed to parse Ollama response:', parseError);
+        logger.error('Failed to parse Ollama response', parseError as Error);
         return {
           type: 'unknown',
           confidence: 0.1,
         };
       }
     } catch (error) {
-      console.error('Error calling Ollama:', error);
+      logger.error('Error calling Ollama', error as Error);
       return {
         type: 'unknown',
         confidence: 0.1,

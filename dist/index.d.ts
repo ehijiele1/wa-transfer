@@ -1,18 +1,8 @@
 declare class WhatsAppMonitoringApp {
-    private whatsappService;
-    private supabaseService;
-    private messageProcessor;
-    private instagramService;
-    private socialMediaManager;
+    private jobScheduler;
     private isRunning;
     constructor();
     start(): Promise<void>;
-    private setupMessageHandlers;
-    private startPeriodicProcessing;
-    private processExistingMessages;
-    private processUnprocessedListings;
-    private processInstagramContent;
-    private processSocialMediaQueues;
     publishToSocialMedia(content: any, platforms: string[], scheduleAt?: Date): Promise<any>;
     getSocialMediaAnalytics(platform?: string, dateRange?: any): Promise<any>;
     createSocialMediaQueue(platform: string, priority: string): Promise<any>;
@@ -24,6 +14,15 @@ declare class WhatsAppMonitoringApp {
     getInstagramAnalytics(): Promise<any>;
     batchPublishInstagram(): Promise<any>;
     stop(): Promise<void>;
+    getStatus(): {
+        isRunning: boolean;
+        jobs: any;
+    };
+    getHealth(): any;
+    getSystemHealth(): Promise<any>;
+    executeMessageProcessing(): Promise<any>;
+    executeContentGeneration(): Promise<any>;
+    executeSocialMediaProcessing(): Promise<any>;
 }
 export default WhatsAppMonitoringApp;
 //# sourceMappingURL=index.d.ts.map

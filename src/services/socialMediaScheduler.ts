@@ -4,6 +4,7 @@ import { PlatformAdapterFactory } from './platformAdapters';
 import { generateId, createExponentialBackoff } from '../utils';
 import SupabaseService from './supabase';
 import { RetryHelper } from './retryHelper';
+import { logger } from '../utils/logger';
 
 export class SocialMediaScheduler {
   private supabase: SupabaseService;
@@ -16,7 +17,7 @@ export class SocialMediaScheduler {
 
   async schedulePost(content: PostContent, platform: 'facebook' | 'twitter' | 'linkedin', scheduledAt: Date): Promise<ScheduledPost> {
     try {
-      console.log(`Scheduling post for ${platform} at ${scheduledAt.toISOString()}`);
+      logger.info(`Scheduling post`, { platform, scheduledAt: scheduledAt.toISOString() });
 
       // Validate platform configuration
       if (!this.validatePlatform(platform)) {
@@ -71,17 +72,17 @@ export class SocialMediaScheduler {
       // Add to processing queue
       await this.addToQueue(scheduledPost);
 
-      console.log(`Post scheduled successfully: ${scheduledPost.id}`);
+      logger.info(`Post scheduled successfully`, { postId: scheduledPost.id });
       return scheduledPost;
     } catch (error) {
-      console.error(`Error scheduling post for ${platform}:`, error);
+      logger.error(`Error scheduling post`, error as Error, { platform, scheduledAt: scheduledAt.toISOString() });
       throw error;
     }
   }
 
   async bulkSchedulePosts(options: BulkPublishOptions): Promise<ScheduledPost[]> {
     try {
-      console.log(`Bulk scheduling ${options.content.length} posts for ${options.platform}`);
+      logger.info(`Bulk scheduling posts`, { count: options.content.length, platform: options.platform });
 
       const scheduledPosts: ScheduledPost[] = [];
 
@@ -95,22 +96,22 @@ export class SocialMediaScheduler {
           // Add delay between posts to avoid rate limiting
           await new Promise(resolve => setTimeout(resolve, 2000));
         } catch (error) {
-          console.error(`Error scheduling post in bulk operation:`, error);
+          logger.error(`Error scheduling post in bulk operation`, error as Error);
           // Continue with next post
         }
       }
 
-      console.log(`Bulk scheduling completed: ${scheduledPosts.length} posts scheduled`);
+      logger.info(`Bulk scheduling completed`, { count: scheduledPosts.length });
       return scheduledPosts;
     } catch (error) {
-      console.error('Error in bulk scheduling:', error);
+      logger.error('Error in bulk scheduling', error as Error);
       throw error;
     }
   }
 
   async processScheduledPosts(): Promise<void> {
     try {
-      console.log('Processing scheduled posts...');
+      logger.info('Processing scheduled posts');
 
       // Get all pending posts
       const pendingPosts = await this.getPendingPosts();
@@ -119,14 +120,14 @@ export class SocialMediaScheduler {
         try {
           await this.processSinglePost(post);
         } catch (error) {
-          console.error(`Error processing scheduled post ${post.id}:`, error);
+          logger.error(`Error processing scheduled post`, error as Error, { postId: post.id });
           await this.handlePostFailure(post, error);
         }
       }
 
-      console.log('Scheduled posts processing completed');
+      logger.info('Scheduled posts processing completed');
     } catch (error) {
-      console.error('Error processing scheduled posts:', error);
+      logger.error('Error processing scheduled posts', error as Error);
     }
   }
 
@@ -138,7 +139,7 @@ export class SocialMediaScheduler {
       return; // Not yet time
     }
 
-    console.log(`Processing scheduled post: ${post.id}`);
+    logger.info(`Processing scheduled post`, { postId: post.id });
 
     // Update status to processing
     post.status = 'processing';
@@ -157,7 +158,7 @@ export class SocialMediaScheduler {
       // Save publishing result
       await this.savePublishingResult(post, result);
       
-      console.log(`Post published successfully: ${post.id} - ${result.url || result.postId}`);
+      logger.info(`Post published successfully`, { postId: post.id, resultUrl: result.url, resultPostId: result.postId });
     } catch (error) {
       // Handle retry logic
       if (post.retryCount < post.maxRetries) {
@@ -168,10 +169,10 @@ export class SocialMediaScheduler {
         const retryDelay = this.retryBackoff(post.retryCount);
         post.scheduledAt = new Date(Date.now() + retryDelay);
         
-        console.log(`Retrying post ${post.id} in ${retryDelay}ms (attempt ${post.retryCount}/${post.maxRetries})`);
+        logger.info(`Retrying post`, { postId: post.id, retryDelay, attempt: post.retryCount, maxRetries: post.maxRetries });
       } else {
         post.status = 'failed';
-        console.error(`Post ${post.id} failed after ${post.maxRetries} retries`);
+        logger.error(`Post failed after retries`, undefined, { postId: post.id, maxRetries: post.maxRetries });
       }
       
       await this.updateScheduledPost(post);
@@ -190,13 +191,13 @@ export class SocialMediaScheduler {
         await this.updateScheduledPost(post);
       }
     } catch (loggingError) {
-      console.error('Error logging post failure:', loggingError);
+      logger.error('Error logging post failure', loggingError as Error);
     }
   }
 
   async createContentQueue(platform: 'facebook' | 'twitter' | 'linkedin' | 'all', priority: 'high' | 'medium' | 'low' = 'medium'): Promise<ContentQueue> {
     try {
-      console.log(`Creating content queue for ${platform} with priority ${priority}`);
+      logger.info(`Creating content queue`, { platform, priority });
 
       const queue: ContentQueue = {
         id: generateId(),
@@ -213,10 +214,10 @@ export class SocialMediaScheduler {
       // Add to active queues
       this.activeQueues.set(queue.id, queue);
 
-      console.log(`Content queue created: ${queue.id}`);
+      logger.info(`Content queue created`, { queueId: queue.id });
       return queue;
     } catch (error) {
-      console.error('Error creating content queue:', error);
+      logger.error('Error creating content queue', error as Error);
       throw error;
     }
   }
@@ -228,7 +229,7 @@ export class SocialMediaScheduler {
         throw new Error(`Queue ${queueId} not found`);
       }
 
-      console.log(`Processing queue: ${queueId}`);
+      logger.info(`Processing queue`, { queueId });
 
       // Filter posts for this queue
       const postsToProcess = queue.posts.filter(post => 
@@ -239,7 +240,7 @@ export class SocialMediaScheduler {
         try {
           await this.processSinglePost(post);
         } catch (error) {
-          console.error(`Error processing queue post ${post.id}:`, error);
+          logger.error(`Error processing queue post`, error as Error, { postId: post.id });
         }
       }
 
@@ -251,9 +252,9 @@ export class SocialMediaScheduler {
         await this.updateQueue(queue);
       }
 
-      console.log(`Queue processing completed: ${queueId}`);
+      logger.info(`Queue processing completed`, { queueId });
     } catch (error) {
-      console.error('Error processing queue:', error);
+      logger.error('Error processing queue', error as Error);
       throw error;
     }
   }
@@ -273,7 +274,7 @@ export class SocialMediaScheduler {
 
       return queue;
     } catch (error) {
-      console.error('Error getting queue status:', error);
+      logger.error('Error getting queue status', error as Error);
       return undefined;
     }
   }
@@ -289,7 +290,7 @@ export class SocialMediaScheduler {
 
       return queues;
     } catch (error) {
-      console.error('Error getting all queues:', error);
+      logger.error('Error getting all queues', error as Error);
       return [];
     }
   }
@@ -309,7 +310,7 @@ export class SocialMediaScheduler {
 
   private async saveScheduledPost(post: ScheduledPost): Promise<void> {
     return RetryHelper.withExponentialBackoff(async () => {
-      const { error } = await this.supabase.supabaseClient
+      const { error } = await this.supabase.getClient()
         .from('social_media_scheduled_posts')
         .insert({
           id: post.id,
@@ -325,7 +326,7 @@ export class SocialMediaScheduler {
         });
 
       if (error) {
-        console.error(`Error saving scheduled post: ${error.message}`);
+        logger.error(`Error saving scheduled post`, error, { message: error.message });
         throw error;
       }
     }, {
@@ -338,7 +339,7 @@ export class SocialMediaScheduler {
 
   private async updateScheduledPost(post: ScheduledPost): Promise<void> {
     return RetryHelper.withExponentialBackoff(async () => {
-      const { error } = await this.supabase.supabaseClient
+      const { error } = await this.supabase.getClient()
         .from('social_media_scheduled_posts')
         .update({
           status: post.status,
@@ -349,7 +350,7 @@ export class SocialMediaScheduler {
         .eq('id', post.id);
 
       if (error) {
-        console.error(`Error updating scheduled post: ${error.message}`);
+        logger.error(`Error updating scheduled post`, error, { message: error.message });
         throw error;
       }
     }, {
@@ -362,7 +363,7 @@ export class SocialMediaScheduler {
 
   private async getPendingPosts(): Promise<ScheduledPost[]> {
     return RetryHelper.withExponentialBackoff(async () => {
-      const { data, error } = await this.supabase.supabaseClient
+      const { data, error } = await this.supabase.getClient()
         .from('social_media_scheduled_posts')
         .select('*')
         .eq('status', 'pending')
@@ -370,11 +371,11 @@ export class SocialMediaScheduler {
         .limit(50);
 
       if (error) {
-        console.error(`Error getting pending posts: ${error.message}`);
+        logger.error(`Error getting pending posts`, error, { message: error.message });
         throw error;
       }
 
-      return data?.map(row => ({
+      return data?.map((row: any) => ({
         id: row.id,
         platform: row.platform as 'facebook' | 'twitter' | 'linkedin',
         content: {
@@ -405,7 +406,7 @@ export class SocialMediaScheduler {
 
   private async savePublishingResult(post: ScheduledPost, result: any): Promise<void> {
     return RetryHelper.withExponentialBackoff(async () => {
-      const { error } = await this.supabase.supabaseClient
+      const { error } = await this.supabase.getClient()
         .from('social_media_scheduled_posts')
         .update({
           status: 'published',
@@ -416,7 +417,7 @@ export class SocialMediaScheduler {
         .eq('id', post.id);
 
       if (error) {
-        console.error(`Error saving publishing result: ${error.message}`);
+        logger.error(`Error saving publishing result`, error, { message: error.message });
         throw error;
       }
     }, {
@@ -429,7 +430,7 @@ export class SocialMediaScheduler {
 
   private async logPostFailure(post: ScheduledPost, error: any): Promise<void> {
     return RetryHelper.withExponentialBackoff(async () => {
-      const { error: updateError } = await this.supabase.supabaseClient
+      const { error: updateError } = await this.supabase.getClient()
         .from('social_media_scheduled_posts')
         .update({
           retry_count: post.retryCount,
@@ -439,7 +440,7 @@ export class SocialMediaScheduler {
         .eq('id', post.id);
 
       if (updateError) {
-        console.error(`Error logging post failure: ${updateError.message}`);
+        logger.error(`Error logging post failure`, updateError, { message: updateError.message });
         throw updateError;
       }
     }, {
@@ -467,23 +468,23 @@ export class SocialMediaScheduler {
   private async saveQueue(queue: ContentQueue): Promise<void> {
     // For now, we'll keep the queue in memory only
     // In a production system, this would save to a content_queues table
-    console.log(`Saving queue to memory: ${queue.id}`);
+    logger.debug(`Saving queue to memory`, { queueId: queue.id });
   }
 
   private async updateQueue(queue: ContentQueue): Promise<void> {
     // For now, we'll keep the queue in memory only
-    console.log(`Updating queue in memory: ${queue.id}`);
+    logger.debug(`Updating queue in memory`, { queueId: queue.id });
   }
 
   private async loadQueueFromDatabase(queueId: string): Promise<ContentQueue | undefined> {
     // Implementation for loading queue from database
-    console.log(`Loading queue from database: ${queueId}`);
+    logger.debug(`Loading queue from database`, { queueId });
     return undefined;
   }
 
   private async loadAllQueuesFromDatabase(): Promise<ContentQueue[]> {
     // Implementation for loading all queues from database
-    console.log('Loading all queues from database');
+    logger.debug('Loading all queues from database');
     return [];
   }
 
@@ -509,7 +510,7 @@ export class SocialMediaScheduler {
     if (queue) {
       queue.status = 'paused';
       await this.updateQueue(queue);
-      console.log(`Queue paused: ${queueId}`);
+      logger.info(`Queue paused`, { queueId });
     }
   }
 
@@ -518,7 +519,7 @@ export class SocialMediaScheduler {
     if (queue) {
       queue.status = 'active';
       await this.updateQueue(queue);
-      console.log(`Queue resumed: ${queueId}`);
+      logger.info(`Queue resumed`, { queueId });
     }
   }
 
@@ -529,7 +530,7 @@ export class SocialMediaScheduler {
       queue.status = 'completed';
       await this.updateQueue(queue);
       this.activeQueues.delete(queueId);
-      console.log(`Queue cleared: ${queueId}`);
+      logger.info(`Queue cleared`, { queueId });
     }
   }
 
@@ -539,27 +540,27 @@ export class SocialMediaScheduler {
    */
   async recoverStuckJobs(): Promise<void> {
     try {
-      console.log('Recovering stuck jobs...');
+      logger.info('Recovering stuck jobs');
       
       // Find posts stuck in processing for more than 5 minutes
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       
-      const { data, error } = await this.supabase.supabaseClient
+      const { data, error } = await this.supabase.getClient()
         .from('social_media_scheduled_posts')
         .select('*')
         .eq('status', 'processing')
         .lt('updated_at', fiveMinutesAgo);
 
       if (error) {
-        console.error(`Error recovering stuck jobs: ${error.message}`);
+        logger.error(`Error recovering stuck jobs`, error, { message: error.message });
         return;
       }
 
       if (data && data.length > 0) {
-        console.log(`Found ${data.length} stuck jobs, resetting to pending`);
+        logger.info(`Found stuck jobs, resetting to pending`, { count: data.length });
         
         for (const post of data) {
-          const { error: updateError } = await this.supabase.supabaseClient
+          const { error: updateError } = await this.supabase.getClient()
             .from('social_media_scheduled_posts')
             .update({
               status: 'pending',
@@ -570,16 +571,16 @@ export class SocialMediaScheduler {
             .eq('id', post.id);
 
           if (updateError) {
-            console.error(`Error resetting stuck job ${post.id}: ${updateError.message}`);
+            logger.error(`Error resetting stuck job`, updateError, { postId: post.id });
           } else {
-            console.log(`Reset stuck job: ${post.id}`);
+            logger.info(`Reset stuck job`, { postId: post.id });
           }
         }
       }
       
-      console.log('Stuck jobs recovery completed');
+      logger.info('Stuck jobs recovery completed');
     } catch (error) {
-      console.error('Error during stuck jobs recovery:', error);
+      logger.error('Error during stuck jobs recovery', error as Error);
     }
   }
 
@@ -588,7 +589,7 @@ export class SocialMediaScheduler {
    */
   private async checkIdempotency(idempotencyKey: string): Promise<boolean> {
     try {
-      const { data, error } = await this.supabase.supabaseClient
+      const { data, error } = await this.supabase.getClient()
         .from('social_media_scheduled_posts')
         .select('id')
         .eq('idempotency_key', idempotencyKey)
@@ -597,7 +598,7 @@ export class SocialMediaScheduler {
 
       return !!(data && data.length > 0);
     } catch (error) {
-      console.error('Error checking idempotency:', error);
+      logger.error('Error checking idempotency', error as Error);
       return false;
     }
   }

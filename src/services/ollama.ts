@@ -1,6 +1,9 @@
 import config from '../config';
 import { getHttpClient } from './httpClient';
 import { RetryHelper } from './retryHelper';
+import { logger } from '../utils/logger';
+import { fetchWithTimeout } from '../utils/fetchWithTimeout';
+import { ollamaCircuitBreaker } from '../utils/circuitBreaker';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -30,8 +33,10 @@ class OllamaService {
   }
 
   async chat(messages: ChatMessage[], options: ChatOptions = {}): Promise<string> {
-    return RetryHelper.withExponentialBackoff(async () => {
-      const response = await this.httpClient.fetch(`${this.baseUrl}/api/chat`, {
+    return ollamaCircuitBreaker.execute(async () => {
+      logger.debug('Calling Ollama chat', { model: this.model, messageCount: messages.length });
+      
+      const response = await fetchWithTimeout(`${this.baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -43,9 +48,7 @@ class OllamaService {
           },
           ...(options.format ? { format: options.format } : {}),
         }),
-        timeout: 30000, // 30 second timeout for Ollama
-        circuitBreaker: 'ollama',
-      });
+      }, 30000);
 
       if (!response.ok) {
         throw new Error(`Ollama chat failed: ${response.statusText}`);
@@ -53,17 +56,14 @@ class OllamaService {
 
       const data: any = await response.json();
       return data.message?.content || '';
-    }, {
-      maxAttempts: 3,
-      baseDelayMs: 1000,
-      maxDelayMs: 10000,
-      jitter: true,
     });
   }
 
   async generate(prompt: string, options: GenerateOptions = {}): Promise<string> {
-    return RetryHelper.withExponentialBackoff(async () => {
-      const response = await this.httpClient.fetch(`${this.baseUrl}/api/generate`, {
+    return ollamaCircuitBreaker.execute(async () => {
+      logger.debug('Calling Ollama generate', { model: this.model, promptLength: prompt.length });
+      
+      const response = await fetchWithTimeout(`${this.baseUrl}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -75,9 +75,7 @@ class OllamaService {
           },
           ...(options.format ? { format: options.format } : {}),
         }),
-        timeout: 30000, // 30 second timeout for Ollama
-        circuitBreaker: 'ollama',
-      });
+      }, 30000);
 
       if (!response.ok) {
         throw new Error(`Ollama generate failed: ${response.statusText}`);
@@ -85,26 +83,21 @@ class OllamaService {
 
       const data: any = await response.json();
       return data.response || '';
-    }, {
-      maxAttempts: 3,
-      baseDelayMs: 1000,
-      maxDelayMs: 10000,
-      jitter: true,
     });
   }
 
   async embed(text: string): Promise<number[]> {
-    return RetryHelper.withExponentialBackoff(async () => {
-      const response = await this.httpClient.fetch(`${this.baseUrl}/api/embed`, {
+    return ollamaCircuitBreaker.execute(async () => {
+      logger.debug('Calling Ollama embed', { model: 'nomic-embed-text', textLength: text.length });
+      
+      const response = await fetchWithTimeout(`${this.baseUrl}/api/embed`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'nomic-embed-text',
           input: text,
         }),
-        timeout: 30000, // 30 second timeout for Ollama
-        circuitBreaker: 'ollama',
-      });
+      }, 30000);
 
       if (!response.ok) {
         throw new Error(`Ollama embed failed: ${response.statusText}`);
@@ -112,11 +105,6 @@ class OllamaService {
 
       const data: any = await response.json();
       return data.embeddings?.[0] || [];
-    }, {
-      maxAttempts: 3,
-      baseDelayMs: 1000,
-      maxDelayMs: 10000,
-      jitter: true,
     });
   }
 

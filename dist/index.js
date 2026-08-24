@@ -3,339 +3,193 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const whatsapp_1 = __importDefault(require("./services/whatsapp"));
-const supabase_1 = __importDefault(require("./services/supabase"));
-const messageProcessor_1 = __importDefault(require("./services/messageProcessor"));
-const instagram_1 = __importDefault(require("./services/instagram"));
-const socialMediaManager_1 = __importDefault(require("./services/socialMediaManager"));
+const JobScheduler_1 = require("./jobs/JobScheduler");
 const config_1 = __importDefault(require("./config"));
+const logger_1 = require("./utils/logger");
+const health_1 = require("./api/health");
 class WhatsAppMonitoringApp {
-    whatsappService;
-    supabaseService;
-    messageProcessor;
-    instagramService = null;
-    socialMediaManager = null;
+    jobScheduler;
     isRunning = false;
     constructor() {
-        this.whatsappService = new whatsapp_1.default();
-        this.supabaseService = new supabase_1.default();
-        this.messageProcessor = new messageProcessor_1.default();
-        try {
-            this.instagramService = new instagram_1.default();
-            this.socialMediaManager = new socialMediaManager_1.default();
-        }
-        catch (error) {
-            console.warn('Social media services not fully configured:', error.message);
-        }
+        this.jobScheduler = new JobScheduler_1.JobScheduler();
     }
     async start() {
         try {
-            console.log('Starting WhatsApp Monitoring Application...');
-            console.log('Configuration:', {
+            logger_1.logger.info('🚀 Starting WhatsApp Monitoring Application...');
+            logger_1.logger.info('📋 Configuration', {
                 supabase: config_1.default.supabase.url ? 'configured' : 'missing',
                 whatsapp: { sessionId: config_1.default.whatsapp.sessionId },
                 monitoring: { groups: config_1.default.monitoring.groups },
                 ollama: { baseUrl: config_1.default.ollama.baseUrl }
             });
-            await this.whatsappService.connect();
-            this.setupMessageHandlers();
+            await this.jobScheduler.start();
             this.isRunning = true;
-            console.log('WhatsApp Monitoring Application started successfully');
-            this.startPeriodicProcessing();
+            logger_1.logger.info('✅ WhatsApp Monitoring Application started successfully');
         }
         catch (error) {
-            console.error('Failed to start application:', error);
+            logger_1.logger.error('❌ Failed to start application', error);
             throw error;
-        }
-    }
-    setupMessageHandlers() {
-        this.whatsappService.onMessage(async (message) => {
-            try {
-                console.log(`Processing message from ${message.from}: ${message.message?.conversation?.substring(0, 100) || 'Media message'}`);
-                const classification = await this.messageProcessor.classifyMessage(message);
-                if (classification.type === 'property' && classification.extractedData) {
-                    console.log(`Property detected: ${classification.extractedData.title}`);
-                    await this.supabaseService.savePropertyListing(classification.extractedData);
-                }
-                else if (classification.type === 'promotion' && classification.extractedData) {
-                    console.log(`Promotion detected: ${classification.extractedData.title}`);
-                    await this.supabaseService.savePromotion(classification.extractedData);
-                }
-                else {
-                    console.log(`Message classified as: ${classification.type} (confidence: ${classification.confidence})`);
-                }
-            }
-            catch (error) {
-                console.error('Error processing message:', error);
-            }
-        });
-    }
-    async startPeriodicProcessing() {
-        console.log('Starting periodic message processing...');
-        const processInterval = setInterval(async () => {
-            if (!this.isRunning) {
-                clearInterval(processInterval);
-                return;
-            }
-            try {
-                await this.processExistingMessages();
-                await this.processUnprocessedListings();
-                await this.processInstagramContent();
-                await this.processSocialMediaQueues();
-            }
-            catch (error) {
-                console.error('Error in periodic processing:', error);
-            }
-        }, config_1.default.monitoring.messageProcessingIntervalMs);
-    }
-    async processExistingMessages() {
-        try {
-            console.log('Fetching recent messages...');
-            const messages = await this.supabaseService.getRecentMessages(50);
-            for (const message of messages) {
-                const classification = await this.messageProcessor.classifyMessage(message);
-                if (classification.type === 'property' && classification.extractedData) {
-                    await this.supabaseService.savePropertyListing(classification.extractedData);
-                }
-                else if (classification.type === 'promotion' && classification.extractedData) {
-                    await this.supabaseService.savePromotion(classification.extractedData);
-                }
-            }
-            console.log(`Processed ${messages.length} existing messages`);
-        }
-        catch (error) {
-            console.error('Error processing existing messages:', error);
-        }
-    }
-    async processUnprocessedListings() {
-        try {
-            console.log('Processing unprocessed property listings...');
-            const properties = await this.supabaseService.getUnprocessedProperties();
-            for (const property of properties) {
-                console.log(`Processing property: ${property.title}`);
-                await this.supabaseService.updatePropertyAsProcessed(property.id);
-            }
-            console.log(`Processed ${properties.length} property listings`);
-        }
-        catch (error) {
-            console.error('Error processing unprocessed properties:', error);
-        }
-        try {
-            console.log('Processing unprocessed promotions...');
-            const promotions = await this.supabaseService.getUnprocessedPromotions();
-            for (const promotion of promotions) {
-                console.log(`Processing promotion: ${promotion.title}`);
-                await this.supabaseService.updatePromotionAsProcessed(promotion.id);
-            }
-            console.log(`Processed ${promotions.length} promotions`);
-        }
-        catch (error) {
-            console.error('Error processing unprocessed promotions:', error);
-        }
-    }
-    async processInstagramContent() {
-        try {
-            console.log('Processing Instagram content...');
-            const unpublishedProperties = await this.supabaseService.getUnprocessedProperties();
-            for (const property of unpublishedProperties) {
-                try {
-                    console.log(`Generating Instagram carousel for property: ${property.title}`);
-                    const carousel = await this.instagramService?.generateCarouselForProperty(property.id);
-                    if (!carousel) {
-                        throw new Error(`Failed to generate carousel for property ${property.id}`);
-                    }
-                    if (config_1.default.instagram?.accessToken) {
-                        console.log(`Auto-publishing carousel for ${property.title}`);
-                        await this.instagramService?.publishCarousel(carousel.id);
-                    }
-                    else {
-                        console.log('Instagram credentials not configured, carousel saved as draft');
-                    }
-                }
-                catch (error) {
-                    console.error(`Error generating carousel for property ${property.id}:`, error);
-                }
-            }
-            console.log('Instagram content processing completed');
-        }
-        catch (error) {
-            console.error('Error processing Instagram content:', error);
-        }
-    }
-    async processSocialMediaQueues() {
-        try {
-            console.log('Processing social media queues...');
-            if (this.socialMediaManager) {
-                await this.socialMediaManager.processQueues();
-            }
-            console.log('Social media queue processing completed');
-        }
-        catch (error) {
-            console.error('Error processing social media queues:', error);
         }
     }
     async publishToSocialMedia(content, platforms, scheduleAt) {
         try {
-            console.log(`Publishing to social media platforms: ${platforms.join(', ')}`);
-            if (!this.socialMediaManager) {
-                throw new Error('Social media manager not initialized');
-            }
-            const results = await this.socialMediaManager.crossPlatformPublish(content, platforms, scheduleAt);
+            logger_1.logger.info(`📤 Publishing to social media platforms: ${platforms.join(', ')}`);
+            const socialMediaJob = this.jobScheduler.getSocialMediaPublishingJob();
+            const results = await socialMediaJob.publishToSocialMedia(content, platforms, scheduleAt);
             return results;
         }
         catch (error) {
-            console.error('Error publishing to social media:', error);
+            logger_1.logger.error('❌ Error publishing to social media', error, { platforms });
             return { success: false, error: error.message };
         }
     }
     async getSocialMediaAnalytics(platform, dateRange) {
         try {
-            console.log(`Getting social media analytics for ${platform || 'all platforms'}`);
-            if (!this.socialMediaManager) {
-                throw new Error('Social media manager not initialized');
-            }
+            logger_1.logger.info(`📊 Getting social media analytics for ${platform || 'all platforms'}`);
+            const socialMediaJob = this.jobScheduler.getSocialMediaPublishingJob();
             if (dateRange) {
-                return await this.socialMediaManager.getPlatformAnalytics(platform || 'all', dateRange);
+                return await socialMediaJob.getAnalytics(platform, dateRange);
             }
             else {
-                const last30Days = {
-                    start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-                    end: new Date(),
-                };
-                return await this.socialMediaManager?.getCrossPlatformAnalytics(last30Days);
+                return await socialMediaJob.getAnalytics();
             }
         }
         catch (error) {
-            console.error('Error getting social media analytics:', error);
+            logger_1.logger.error('❌ Error getting social media analytics', error, { ...(platform ? { platform } : {}), dateRange });
             return { success: false, error: error.message };
         }
     }
     async createSocialMediaQueue(platform, priority) {
         try {
-            console.log(`Creating social media queue for ${platform}`);
-            if (!this.socialMediaManager) {
-                throw new Error('Social media manager not initialized');
-            }
-            return await this.socialMediaManager.createQueue(platform, priority);
+            logger_1.logger.info(`📦 Creating social media queue for ${platform}`);
+            const socialMediaJob = this.jobScheduler.getSocialMediaPublishingJob();
+            return await socialMediaJob.createQueue(platform, priority);
         }
         catch (error) {
-            console.error('Error creating social media queue:', error);
+            logger_1.logger.error('❌ Error creating social media queue', error, { platform, priority });
             return { success: false, error: error.message };
         }
     }
     async getSocialMediaDashboard() {
         try {
-            console.log('Generating social media dashboard summary');
-            if (!this.socialMediaManager) {
-                throw new Error('Social media manager not initialized');
-            }
-            return await this.socialMediaManager.getDashboardSummary();
+            logger_1.logger.info('📈 Generating social media dashboard summary');
+            const socialMediaJob = this.jobScheduler.getSocialMediaPublishingJob();
+            return await socialMediaJob.getDashboard();
         }
         catch (error) {
-            console.error('Error generating social media dashboard:', error);
+            logger_1.logger.error('❌ Error generating social media dashboard', error);
             return { success: false, error: error.message };
         }
     }
     async createABTest(testConfig) {
         try {
-            console.log('Creating A/B test for social media');
-            if (!this.socialMediaManager) {
-                throw new Error('Social media manager not initialized');
-            }
-            return await this.socialMediaManager.createABTest(testConfig);
+            logger_1.logger.info('🧪 Creating A/B test for social media');
+            const socialMediaJob = this.jobScheduler.getSocialMediaPublishingJob();
+            return await socialMediaJob.createABTest(testConfig);
         }
         catch (error) {
-            console.error('Error creating A/B test:', error);
+            logger_1.logger.error('❌ Error creating A/B test', error, { testConfig });
             return { success: false, error: error.message };
         }
     }
     async getABTestResults(testId) {
         try {
-            console.log(`Getting A/B test results: ${testId}`);
-            if (!this.socialMediaManager) {
-                throw new Error('Social media manager not initialized');
-            }
-            return await this.socialMediaManager.getABTestResults(testId);
+            logger_1.logger.info(`📊 Getting A/B test results: ${testId}`);
+            const socialMediaJob = this.jobScheduler.getSocialMediaPublishingJob();
+            return await socialMediaJob.getABTestResults(testId);
         }
         catch (error) {
-            console.error('Error getting A/B test results:', error);
+            logger_1.logger.error('❌ Error getting A/B test results', error, { testId });
             return { success: false, error: error.message };
         }
     }
     async generateInstagramCarousel(propertyId) {
         try {
-            if (!this.instagramService) {
-                throw new Error('Instagram service not initialized');
-            }
-            const carousel = await this.instagramService.generateCarouselForProperty(propertyId);
-            return { success: true, carousel_id: carousel.id };
+            logger_1.logger.info(`🎨 Generating Instagram carousel for property ${propertyId}...`);
+            const contentJob = this.jobScheduler.getContentGenerationJob();
+            return await contentJob.generateSingleCarousel(propertyId);
         }
         catch (error) {
-            console.error('❌ Error generating carousel for property:', error);
+            logger_1.logger.error('❌ Error generating carousel for property', error, { propertyId });
             return { success: false, error: error.message };
         }
     }
     async publishInstagramCarousel(carouselId) {
         try {
-            if (!this.instagramService) {
-                throw new Error('Instagram service not initialized');
-            }
-            const postResponse = await this.instagramService.publishCarousel(carouselId);
-            return { success: true, post: postResponse };
+            logger_1.logger.info(`📤 Publishing Instagram carousel ${carouselId}...`);
+            const contentJob = this.jobScheduler.getContentGenerationJob();
+            return await contentJob.publishSingleCarousel(carouselId);
         }
         catch (error) {
-            console.error('Error publishing Instagram carousel:', error);
+            logger_1.logger.error('❌ Error publishing Instagram carousel', error, { carouselId });
             return { success: false, error: error.message };
         }
     }
     async getInstagramAnalytics() {
         try {
-            if (!this.instagramService) {
-                throw new Error('Instagram service not initialized');
-            }
-            const analytics = await this.instagramService.getAnalytics();
-            return { success: true, analytics };
+            logger_1.logger.info('📊 Getting Instagram analytics...');
+            const contentJob = this.jobScheduler.getContentGenerationJob();
+            return await contentJob.getInstagramAnalytics();
         }
         catch (error) {
-            console.error('Error getting Instagram analytics:', error);
+            logger_1.logger.error('❌ Error getting Instagram analytics', error);
             return { success: false, error: error.message };
         }
     }
     async batchPublishInstagram() {
         try {
-            if (!this.instagramService) {
-                throw new Error('Instagram service not initialized');
-            }
-            const publishedPosts = await this.instagramService.batchPublishCarousels();
-            return { success: true, published_posts: publishedPosts };
+            logger_1.logger.info('📦 Starting batch Instagram publish...');
+            const contentJob = this.jobScheduler.getContentGenerationJob();
+            return await contentJob.batchPublishCarousels();
         }
         catch (error) {
-            console.error('Error in batch Instagram publish:', error);
+            logger_1.logger.error('❌ Error in batch Instagram publish', error);
             return { success: false, error: error.message };
         }
     }
     async stop() {
         try {
-            console.log('Stopping WhatsApp Monitoring Application...');
+            logger_1.logger.info('🛑 Stopping WhatsApp Monitoring Application...');
             this.isRunning = false;
-            await this.whatsappService.disconnect();
-            console.log('WhatsApp Monitoring Application stopped successfully');
+            await this.jobScheduler.stop();
+            logger_1.logger.info('✅ WhatsApp Monitoring Application stopped successfully');
         }
         catch (error) {
-            console.error('Error stopping application:', error);
+            logger_1.logger.error('❌ Error stopping application', error);
             throw error;
         }
+    }
+    getStatus() {
+        return {
+            isRunning: this.isRunning,
+            jobs: this.jobScheduler.getJobStatus()
+        };
+    }
+    getHealth() {
+        return this.jobScheduler.getHealth();
+    }
+    async getSystemHealth() {
+        return await health_1.healthChecker.checkHealth();
+    }
+    async executeMessageProcessing() {
+        return await this.jobScheduler.executeMessageProcessing();
+    }
+    async executeContentGeneration() {
+        return await this.jobScheduler.executeContentGeneration();
+    }
+    async executeSocialMediaProcessing() {
+        return await this.jobScheduler.executeSocialMediaProcessing();
     }
 }
 async function main() {
     const app = new WhatsAppMonitoringApp();
     process.on('SIGINT', async () => {
-        console.log('Received SIGINT, shutting down gracefully...');
+        logger_1.logger.info('Received SIGINT, shutting down gracefully...');
         await app.stop();
         process.exit(0);
     });
     process.on('SIGTERM', async () => {
-        console.log('Received SIGTERM, shutting down gracefully...');
+        logger_1.logger.info('Received SIGTERM, shutting down gracefully...');
         await app.stop();
         process.exit(0);
     });
@@ -343,7 +197,7 @@ async function main() {
         await app.start();
     }
     catch (error) {
-        console.error('Application failed to start:', error);
+        logger_1.logger.error('Application failed to start', error);
         process.exit(1);
     }
 }

@@ -124,17 +124,18 @@ services:
   #   networks:
   #     - wa-transfer-network
 
-  # Optional: Redis for caching (if needed)
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: wa-transfer-redis
-  #   restart: unless-stopped
-  #   volumes:
-  #     - wa-transfer-redis-data:/data
-  #   ports:
-  #     - "6379:6379"
-  #   networks:
-  #     - wa-transfer-network
+  # Redis for job queues (required for BullMQ)
+  redis:
+    image: redis:7-alpine
+    container_name: wa-transfer-redis
+    restart: unless-stopped
+    volumes:
+      - wa-transfer-redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - wa-transfer-network
+    command: redis-server --appendonly yes
 
 volumes:
   wa-transfer-data:

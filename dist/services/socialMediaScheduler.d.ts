@@ -28,6 +28,9 @@ export declare class SocialMediaScheduler {
     pauseQueue(queueId: string): Promise<void>;
     resumeQueue(queueId: string): Promise<void>;
     clearQueue(queueId: string): Promise<void>;
+    recoverStuckJobs(): Promise<void>;
+    private checkIdempotency;
+    private getIdempotencyKey;
 }
 export default SocialMediaScheduler;
 //# sourceMappingURL=socialMediaScheduler.d.ts.map

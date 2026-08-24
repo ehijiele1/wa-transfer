@@ -5,6 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MessageProcessor = void 0;
 const supabase_1 = __importDefault(require("./supabase"));
+const logger_1 = require("../utils/logger");
+const fetchWithTimeout_1 = require("../utils/fetchWithTimeout");
+const inputValidator_1 = require("../utils/inputValidator");
 class MessageProcessor {
     supabase;
     constructor() {
@@ -17,6 +20,29 @@ class MessageProcessor {
                 type: 'unknown',
                 confidence: 0.1,
             };
+        }
+        const validation = inputValidator_1.inputValidator.validateText(text);
+        if (!validation.valid) {
+            logger_1.logger.warn('Message validation failed', {
+                errors: validation.errors,
+                messageId: message.id
+            });
+            return {
+                type: 'unknown',
+                confidence: 0.1,
+                extractedData: { validationErrors: validation.errors }
+            };
+        }
+        if (message.message?.imageMessage?.url) {
+            try {
+                inputValidator_1.inputValidator.validateUrl(message.message.imageMessage.url);
+            }
+            catch (error) {
+                logger_1.logger.warn('Media URL validation failed', {
+                    error,
+                    messageId: message.id
+                });
+            }
         }
         const classification = await this.classifyWithOllama(text);
         if (classification.type === 'property') {
@@ -57,7 +83,8 @@ class MessageProcessor {
     }
     async classifyWithOllama(text) {
         try {
-            const response = await fetch(`${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/generate`, {
+            const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+            const response = await (0, fetchWithTimeout_1.fetchWithTimeout)(`${ollamaUrl}/api/generate`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -86,7 +113,7 @@ Example outputs:
 {"type": "unknown", "confidence": 0.2, "reason": "Unclear message with no clear purpose"}`,
                     stream: false,
                 }),
-            });
+            }, 30000);
             if (!response.ok) {
                 throw new Error(`Ollama request failed: ${response.statusText}`);
             }
@@ -100,7 +127,7 @@ Example outputs:
                 };
             }
             catch (parseError) {
-                console.error('Failed to parse Ollama response:', parseError);
+                logger_1.logger.error('Failed to parse Ollama response', parseError);
                 return {
                     type: 'unknown',
                     confidence: 0.1,
@@ -108,7 +135,7 @@ Example outputs:
             }
         }
         catch (error) {
-            console.error('Error calling Ollama:', error);
+            logger_1.logger.error('Error calling Ollama', error);
             return {
                 type: 'unknown',
                 confidence: 0.1,

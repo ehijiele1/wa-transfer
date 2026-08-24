@@ -199,7 +199,7 @@ export class IdempotencyService {
   async checkDeduplication(
     source: string,
     sourceId: string,
-    dataType: string
+    dataType: DeduplicationKey['dataType']
   ): Promise<{ isDuplicate: boolean; key?: string }> {
     if (!this.config.enableDeduplication) {
       return { isDuplicate: false };
@@ -315,7 +315,7 @@ export const executeWithIdempotency = <T>(
 export const checkDeduplication = (
   source: string,
   sourceId: string,
-  dataType: string
+  dataType: DeduplicationKey['dataType']
 ) => idempotencyService.checkDeduplication(source, sourceId, dataType);
 
 export const markAsProcessed = (dedupKey: string) => idempotencyService.markAsProcessed(dedupKey);

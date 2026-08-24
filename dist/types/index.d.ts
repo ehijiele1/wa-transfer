@@ -54,6 +54,8 @@ export interface Config {
         groups: string[];
         maxMessagesPerGroup: number;
         messageProcessingIntervalMs: number;
+        contentGenerationIntervalMs: number;
+        socialMediaIntervalMs: number;
     };
 }
 export interface WhatsAppMessage {

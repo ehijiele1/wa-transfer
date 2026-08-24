@@ -28,6 +28,8 @@ const config = {
         groups: process.env.MONITORING_GROUPS?.split(',') || [],
         maxMessagesPerGroup: parseInt(process.env.MAX_MESSAGES_PER_GROUP || '100'),
         messageProcessingIntervalMs: parseInt(process.env.MESSAGE_PROCESSING_INTERVAL_MS || '30000'),
+        contentGenerationIntervalMs: parseInt(process.env.CONTENT_GENERATION_INTERVAL_MS || '300000'),
+        socialMediaIntervalMs: parseInt(process.env.SOCIAL_MEDIA_INTERVAL_MS || '60000'),
     },
 };
 exports.default = config;

@@ -3,6 +3,7 @@ import { PostContent, ATestConfig } from '../types/socialMedia';
 import { PlatformAdapterFactory } from './platformAdapters';
 import SupabaseService from './supabase';
 import { generateId } from '../utils';
+import { logger } from '../utils/logger';
 
 export class ABTestingService {
   private supabase: SupabaseService;
@@ -14,7 +15,7 @@ export class ABTestingService {
 
   async createABTest(test: Omit<ATestConfig, 'id' | 'status' | 'results'>): Promise<ATestConfig> {
     try {
-      console.log(`Creating A/B test: ${test.name}`);
+      logger.info(`Creating A/B test`, { testName: test.name });
 
       const abTest: ATestConfig = {
         id: generateId(),
@@ -31,17 +32,17 @@ export class ABTestingService {
       // Add to active tests
       this.activeTests.set(abTest.id, abTest);
 
-      console.log(`A/B test created successfully: ${abTest.id}`);
+      logger.info(`A/B test created successfully`, { testId: abTest.id });
       return abTest;
     } catch (error) {
-      console.error('Error creating A/B test:', error);
+      logger.error('Error creating A/B test', error as Error);
       throw error;
     }
   }
 
   async startABTest(testId: string): Promise<ATestConfig> {
     try {
-      console.log(`Starting A/B test: ${testId}`);
+      logger.info(`Starting A/B test`, { testId });
 
       const test = this.activeTests.get(testId) || await this.loadABTestFromDatabase(testId);
       if (!test) {
@@ -63,17 +64,17 @@ export class ABTestingService {
       // Save updated test
       await this.updateABTest(test);
 
-      console.log(`A/B test started successfully: ${testId}`);
+      logger.info(`A/B test started successfully`, { testId });
       return test;
     } catch (error) {
-      console.error('Error starting A/B test:', error);
+      logger.error('Error starting A/B test', error as Error, { testId });
       throw error;
     }
   }
 
   async stopABTest(testId: string): Promise<ATestConfig> {
     try {
-      console.log(`Stopping A/B test: ${testId}`);
+      logger.info(`Stopping A/B test`, { testId });
 
       const test = this.activeTests.get(testId) || await this.loadABTestFromDatabase(testId);
       if (!test) {
@@ -90,10 +91,10 @@ export class ABTestingService {
       // Save updated test
       await this.updateABTest(test);
 
-      console.log(`A/B test stopped successfully: ${testId}`);
+      logger.info(`A/B test stopped successfully`, { testId });
       return test;
     } catch (error) {
-      console.error('Error stopping A/B test:', error);
+      logger.error('Error stopping A/B test', error as Error, { testId });
       throw error;
     }
   }
@@ -112,7 +113,7 @@ export class ABTestingService {
 
       return test;
     } catch (error) {
-      console.error('Error getting A/B test results:', error);
+      logger.error('Error getting A/B test results', error as Error, { testId });
       return null;
     }
   }
@@ -128,14 +129,14 @@ export class ABTestingService {
 
       return tests;
     } catch (error) {
-      console.error('Error getting all A/B tests:', error);
+      logger.error('Error getting all A/B tests', error as Error);
       return [];
     }
   }
 
   async createVariant(testId: string, variant: { content: PostContent; audience?: string[] }): Promise<string> {
     try {
-      console.log(`Creating variant for test: ${testId}`);
+      logger.info(`Creating variant for test`, { testId });
 
       const test = this.activeTests.get(testId) || await this.loadABTestFromDatabase(testId);
       if (!test) {
@@ -155,17 +156,17 @@ export class ABTestingService {
 
       await this.updateABTest(test);
 
-      console.log(`Variant created successfully: ${variantId}`);
+      logger.info(`Variant created successfully`, { variantId });
       return variantId;
     } catch (error) {
-      console.error('Error creating variant:', error);
+      logger.error('Error creating variant', error as Error, { testId });
       throw error;
     }
   }
 
   async getTestRecommendations(testId: string): Promise<any> {
     try {
-      console.log(`Getting recommendations for test: ${testId}`);
+      logger.info(`Getting recommendations for test`, { testId });
 
       const test = this.activeTests.get(testId) || await this.loadABTestFromDatabase(testId);
       if (!test) {
@@ -185,7 +186,7 @@ export class ABTestingService {
 
       return recommendations;
     } catch (error) {
-      console.error('Error getting test recommendations:', error);
+      logger.error('Error getting test recommendations', error as Error, { testId });
       throw error;
     }
   }
@@ -230,7 +231,7 @@ export class ABTestingService {
   }
 
   private async distributeVariants(test: ATestConfig): Promise<void> {
-    console.log(`Distributing variants for test: ${test.id}`);
+    logger.info(`Distributing variants for test`, { testId: test.id });
 
     // Create scheduled posts for each variant
     for (const variant of test.variants) {
@@ -239,18 +240,18 @@ export class ABTestingService {
         
         await this.scheduleVariant(test, variant, scheduledAt);
       } catch (error) {
-        console.error(`Error scheduling variant ${variant.id}:`, error);
+        logger.error(`Error scheduling variant`, error as Error, { variantId: variant.id });
       }
     }
   }
 
   private async scheduleVariant(test: ATestConfig, variant: any, scheduledAt: Date): Promise<void> {
     // Implementation for scheduling a variant
-    console.log(`Scheduling variant ${variant.id} for ${scheduledAt.toISOString()}`);
+    logger.debug(`Scheduling variant`, { variantId: variant.id, scheduledAt: scheduledAt.toISOString() });
   }
 
   private async calculateTestResults(test: ATestConfig): Promise<void> {
-    console.log(`Calculating results for test: ${test.id}`);
+    logger.info(`Calculating results for test`, { testId: test.id });
 
     // Get metrics for each variant
     for (const variant of test.variants) {
@@ -283,7 +284,7 @@ export class ABTestingService {
 
       return metrics;
     } catch (error: any) {
-      console.error(`Error getting metrics for variant ${variant.id}:`, error);
+      logger.error(`Error getting metrics for variant`, error as Error, { variantId: variant.id });
       return {};
     }
   }
@@ -361,20 +362,20 @@ export class ABTestingService {
 
   // Database operations
   private async saveABTest(test: ATestConfig): Promise<void> {
-    console.log(`Saving A/B test to database: ${test.id}`);
+    logger.debug(`Saving A/B test to database`, { testId: test.id });
   }
 
   private async updateABTest(test: ATestConfig): Promise<void> {
-    console.log(`Updating A/B test in database: ${test.id}`);
+    logger.debug(`Updating A/B test in database`, { testId: test.id });
   }
 
   private async loadABTestFromDatabase(testId: string): Promise<ATestConfig | null> {
-    console.log(`Loading A/B test from database: ${testId}`);
+    logger.debug(`Loading A/B test from database`, { testId });
     return null;
   }
 
   private async loadAllABTestsFromDatabase(): Promise<ATestConfig[]> {
-    console.log('Loading all A/B tests from database');
+    logger.debug('Loading all A/B tests from database');
     return [];
   }
 

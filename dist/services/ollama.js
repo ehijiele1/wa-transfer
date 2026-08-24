@@ -4,58 +4,82 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const config_1 = __importDefault(require("../config"));
+const httpClient_1 = require("./httpClient");
+const logger_1 = require("../utils/logger");
+const fetchWithTimeout_1 = require("../utils/fetchWithTimeout");
+const circuitBreaker_1 = require("../utils/circuitBreaker");
 class OllamaService {
     baseUrl;
     model;
+    httpClient;
     constructor() {
         this.baseUrl = config_1.default.ollama.baseUrl;
         this.model = config_1.default.ollama.model;
+        this.httpClient = (0, httpClient_1.getHttpClient)();
     }
     async chat(messages, options = {}) {
-        const response = await fetch(`${this.baseUrl}/api/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: this.model,
-                messages,
-                stream: false,
-                options: {
-                    temperature: options.temperature ?? 0.7,
-                },
-                ...(options.format ? { format: options.format } : {}),
-            }),
+        return circuitBreaker_1.ollamaCircuitBreaker.execute(async () => {
+            logger_1.logger.debug('Calling Ollama chat', { model: this.model, messageCount: messages.length });
+            const response = await (0, fetchWithTimeout_1.fetchWithTimeout)(`${this.baseUrl}/api/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: this.model,
+                    messages,
+                    stream: false,
+                    options: {
+                        temperature: options.temperature ?? 0.7,
+                    },
+                    ...(options.format ? { format: options.format } : {}),
+                }),
+            }, 30000);
+            if (!response.ok) {
+                throw new Error(`Ollama chat failed: ${response.statusText}`);
+            }
+            const data = await response.json();
+            return data.message?.content || '';
         });
-        const data = await response.json();
-        return data.message?.content || '';
     }
     async generate(prompt, options = {}) {
-        const response = await fetch(`${this.baseUrl}/api/generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: this.model,
-                prompt,
-                stream: false,
-                options: {
-                    temperature: options.temperature ?? 0.7,
-                },
-                ...(options.format ? { format: options.format } : {}),
-            }),
+        return circuitBreaker_1.ollamaCircuitBreaker.execute(async () => {
+            logger_1.logger.debug('Calling Ollama generate', { model: this.model, promptLength: prompt.length });
+            const response = await (0, fetchWithTimeout_1.fetchWithTimeout)(`${this.baseUrl}/api/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: this.model,
+                    prompt,
+                    stream: false,
+                    options: {
+                        temperature: options.temperature ?? 0.7,
+                    },
+                    ...(options.format ? { format: options.format } : {}),
+                }),
+            }, 30000);
+            if (!response.ok) {
+                throw new Error(`Ollama generate failed: ${response.statusText}`);
+            }
+            const data = await response.json();
+            return data.response || '';
         });
-        const data = await response.json();
-        return data.response || '';
     }
     async embed(text) {
-        const response = await fetch(`${this.baseUrl}/api/embed`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: 'nomic-embed-text',
-                input: text,
-            }),
+        return circuitBreaker_1.ollamaCircuitBreaker.execute(async () => {
+            logger_1.logger.debug('Calling Ollama embed', { model: 'nomic-embed-text', textLength: text.length });
+            const response = await (0, fetchWithTimeout_1.fetchWithTimeout)(`${this.baseUrl}/api/embed`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: 'nomic-embed-text',
+                    input: text,
+                }),
+            }, 30000);
+            if (!response.ok) {
+                throw new Error(`Ollama embed failed: ${response.statusText}`);
+            }
+            const data = await response.json();
+            return data.embeddings?.[0] || [];
         });
-        const data = await response.json();
-        return data.embeddings?.[0] || [];
     }
     async generateSocialPost(listing, platform) {
         const platformGuides = {

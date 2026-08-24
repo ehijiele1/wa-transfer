@@ -21,3 +21,9 @@ Thumbs.db
 
 # Duplicated app (snapshot only, not active)
 wa-transfer/wa-transfer/node_modules/
+
+# Added by ggshield
+.cache_ggshield
+
+# AI gateway record (contains keys)
+OLLAMA_GATEWAY.md

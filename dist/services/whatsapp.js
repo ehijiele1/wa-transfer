@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WhatsAppService = void 0;
 const whatsapp_web_js_1 = require("whatsapp-web.js");
+const inputGuard_1 = require("./inputGuard");
+const logger_1 = require("../utils/logger");
 class WhatsAppService {
     client = null;
     messageCallbacks = [];
@@ -31,10 +33,10 @@ class WhatsAppService {
             });
             this.setupEventHandlers();
             await this.client.initialize();
-            console.log('WhatsApp client connected successfully');
+            logger_1.logger.info('WhatsApp client connected successfully');
         }
         catch (error) {
-            console.error('Failed to connect to WhatsApp:', error);
+            logger_1.logger.error('Failed to connect to WhatsApp', error);
             throw error;
         }
     }
@@ -42,42 +44,41 @@ class WhatsAppService {
         if (!this.client)
             return;
         this.client.on('qr', (qr) => {
-            console.log('QR Code generated - scan with WhatsApp Web');
+            logger_1.logger.info('QR Code generated - scan with WhatsApp Web');
         });
         this.client.on('authenticated', () => {
-            console.log('WhatsApp authenticated');
+            logger_1.logger.info('WhatsApp authenticated');
         });
         this.client.on('auth_failure', (msg) => {
-            console.error('WhatsApp auth failure:', msg);
+            logger_1.logger.error('WhatsApp auth failure', new Error(msg));
         });
         this.client.on('ready', async () => {
             this.readyTime = Date.now();
             this.reconnectAttempts = 0;
-            console.log('WhatsApp connection established');
+            logger_1.logger.info('WhatsApp connection established');
             setTimeout(async () => {
                 try {
                     const chats = await this.client.getChats();
                     const groups = chats.filter(c => c.isGroup);
-                    console.log('=== AVAILABLE GROUPS (' + groups.length + ') ===');
+                    logger_1.logger.info('Available groups', { count: groups.length });
                     for (const g of groups) {
-                        console.log(g.name + ': ' + g.id._serialized);
+                        logger_1.logger.info('Group found', { name: g.name, id: g.id._serialized });
                     }
-                    console.log('=== END GROUPS ===');
                 }
                 catch (e) {
-                    console.log('Group listing unavailable: ' + e.message);
+                    logger_1.logger.warn('Group listing unavailable', { error: e.message });
                 }
             }, 15000);
         });
         this.client.on('disconnected', async (reason) => {
-            console.log('WhatsApp disconnected:', reason);
+            logger_1.logger.warn('WhatsApp disconnected', { reason });
             if (reason !== 'LOGGED_OUT' && this.reconnectAttempts < this.maxReconnectAttempts) {
                 this.reconnectAttempts++;
-                console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+                logger_1.logger.info(`Attempting to reconnect`, { attempt: this.reconnectAttempts, max: this.maxReconnectAttempts });
                 setTimeout(() => this.connect(), this.retryDelayMs);
             }
             else {
-                console.error('Max reconnection attempts reached or logged out');
+                logger_1.logger.error('Max reconnection attempts reached or logged out');
             }
         });
         this.client.on('message_create', async (message) => {
@@ -100,6 +101,14 @@ class WhatsAppService {
                 message: await this.extractMessageContent(message),
                 metadata: this.extractMetadata(message, chat),
             };
+            const inputGuard = (0, inputGuard_1.getInputGuard)();
+            try {
+                inputGuard.validateMessage(whatsappMessage);
+            }
+            catch (validationError) {
+                await inputGuard.quarantine(validationError.message, whatsappMessage);
+                return;
+            }
             for (const callback of this.messageCallbacks) {
                 callback(whatsappMessage);
             }
@@ -107,7 +116,7 @@ class WhatsAppService {
         catch (error) {
             if (error?.message?.includes('Target closed'))
                 return;
-            console.error('Error processing message:', error);
+            logger_1.logger.error('Error processing message', error);
         }
     }
     getMessageType(message) {
@@ -162,7 +171,7 @@ class WhatsAppService {
             this.client.removeAllListeners();
             await this.client.destroy();
             this.client = null;
-            console.log('WhatsApp client disconnected');
+            logger_1.logger.info('WhatsApp client disconnected');
         }
     }
 }

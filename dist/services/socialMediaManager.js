@@ -11,6 +11,7 @@ const abTesting_1 = require("./abTesting");
 const platformAdapters_1 = require("./platformAdapters");
 const supabase_1 = __importDefault(require("./supabase"));
 const utils_1 = require("../utils");
+const logger_1 = require("../utils/logger");
 class SocialMediaManager {
     scheduler;
     analytics;
@@ -24,7 +25,7 @@ class SocialMediaManager {
     }
     async publishContent(content, platform, immediate = true) {
         try {
-            console.log(`Publishing content to ${platform}`);
+            logger_1.logger.info(`Publishing content to ${platform}`, { platform, contentId: content.id });
             if (!this.validatePlatform(platform)) {
                 throw new Error(`Platform ${platform} is not configured`);
             }
@@ -47,7 +48,7 @@ class SocialMediaManager {
             if (immediate) {
                 const result = await adapter.publish(content);
                 await this.savePublishingResult(content, platform, result);
-                console.log(`Content published successfully to ${platform}: ${result.url || result.postId}`);
+                logger_1.logger.info(`Content published successfully`, { platform, resultUrl: result.url, postId: result.postId });
                 return result;
             }
             else {
@@ -55,13 +56,13 @@ class SocialMediaManager {
             }
         }
         catch (error) {
-            console.error(`Error publishing content to ${platform}:`, error);
+            logger_1.logger.error(`Error publishing content to ${platform}`, error, { platform, contentId: content.id });
             throw error;
         }
     }
     async bulkPublish(options) {
         try {
-            console.log(`Bulk publishing ${options.content.length} posts to ${options.platform}`);
+            logger_1.logger.info(`Bulk publishing posts`, { count: options.content.length, platform: options.platform });
             const results = {
                 success: [],
                 failed: [],
@@ -83,51 +84,51 @@ class SocialMediaManager {
                     });
                 }
             }
-            console.log(`Bulk publishing completed: ${results.success.length} successful, ${results.failed.length} failed`);
+            logger_1.logger.info(`Bulk publishing completed`, { success: results.success.length, failed: results.failed.length });
             return results;
         }
         catch (error) {
-            console.error('Error in bulk publishing:', error);
+            logger_1.logger.error('Error in bulk publishing', error);
             throw error;
         }
     }
     async scheduleContent(content, platform, scheduledAt) {
         try {
-            console.log(`Scheduling content for ${platform} at ${scheduledAt.toISOString()}`);
+            logger_1.logger.info(`Scheduling content`, { platform, scheduledAt: scheduledAt.toISOString() });
             return await this.scheduler.schedulePost(content, platform, scheduledAt);
         }
         catch (error) {
-            console.error(`Error scheduling content for ${platform}:`, error);
+            logger_1.logger.error(`Error scheduling content`, error, { platform, scheduledAt: scheduledAt.toISOString() });
             throw error;
         }
     }
     async scheduleBulkContent(options) {
         try {
-            console.log(`Scheduling bulk content for ${options.platform}`);
+            logger_1.logger.info(`Scheduling bulk content`, { platform: options.platform });
             return await this.scheduler.bulkSchedulePosts(options);
         }
         catch (error) {
-            console.error('Error in bulk scheduling:', error);
+            logger_1.logger.error('Error in bulk scheduling', error);
             throw error;
         }
     }
     async createQueue(platform, priority = 'medium') {
         try {
-            console.log(`Creating queue for ${platform} with priority ${priority}`);
+            logger_1.logger.info(`Creating queue`, { platform, priority });
             return await this.scheduler.createContentQueue(platform, priority);
         }
         catch (error) {
-            console.error('Error creating queue:', error);
+            logger_1.logger.error('Error creating queue', error);
             throw error;
         }
     }
     async processQueues() {
         try {
-            console.log('Processing all queues...');
+            logger_1.logger.info('Processing all queues');
             await this.scheduler.processScheduledPosts();
         }
         catch (error) {
-            console.error('Error processing queues:', error);
+            logger_1.logger.error('Error processing queues', error);
             throw error;
         }
     }
@@ -145,13 +146,13 @@ class SocialMediaManager {
             }
         }
         catch (error) {
-            console.error('Error getting queue status:', error);
+            logger_1.logger.error('Error getting queue status', error);
             throw error;
         }
     }
     async manageQueue(queueId, action) {
         try {
-            console.log(`Managing queue ${queueId}: ${action}`);
+            logger_1.logger.info(`Managing queue`, { queueId, action });
             switch (action) {
                 case 'pause':
                     await this.scheduler.pauseQueue(queueId);
@@ -165,103 +166,103 @@ class SocialMediaManager {
             }
         }
         catch (error) {
-            console.error(`Error managing queue ${queueId}:`, error);
+            logger_1.logger.error(`Error managing queue`, error, { queueId, action });
             throw error;
         }
     }
     async getPlatformAnalytics(platform, dateRange) {
         try {
-            console.log(`Getting analytics for ${platform}`);
+            logger_1.logger.info(`Getting analytics`, { platform, dateRange });
             return await this.analytics.getPlatformAnalytics(platform, dateRange);
         }
         catch (error) {
-            console.error('Error getting platform analytics:', error);
+            logger_1.logger.error('Error getting platform analytics', error, { platform });
             throw error;
         }
     }
     async getCrossPlatformAnalytics(dateRange) {
         try {
-            console.log('Getting cross-platform analytics');
+            logger_1.logger.info('Getting cross-platform analytics', { dateRange });
             return await this.analytics.getCrossPlatformAnalytics(dateRange);
         }
         catch (error) {
-            console.error('Error getting cross-platform analytics:', error);
+            logger_1.logger.error('Error getting cross-platform analytics', error);
             throw error;
         }
     }
     async getRealTimeMetrics(platform) {
         try {
-            console.log('Getting real-time metrics');
+            logger_1.logger.info('Getting real-time metrics', { ...(platform ? { platform } : {}) });
             return await this.analytics.getRealTimeMetrics(platform);
         }
         catch (error) {
-            console.error('Error getting real-time metrics:', error);
+            logger_1.logger.error('Error getting real-time metrics', error);
             throw error;
         }
     }
     async generatePerformanceReport(dateRange) {
         try {
-            console.log('Generating performance report');
+            logger_1.logger.info('Generating performance report', { dateRange });
             return await this.analytics.generatePerformanceReport(dateRange);
         }
         catch (error) {
-            console.error('Error generating performance report:', error);
+            logger_1.logger.error('Error generating performance report', error);
             throw error;
         }
     }
     async createABTest(testConfig) {
         try {
-            console.log('Creating A/B test');
+            logger_1.logger.info('Creating A/B test');
             return await this.abTesting.createABTest(testConfig);
         }
         catch (error) {
-            console.error('Error creating A/B test:', error);
+            logger_1.logger.error('Error creating A/B test', error);
             throw error;
         }
     }
     async startABTest(testId) {
         try {
-            console.log(`Starting A/B test: ${testId}`);
+            logger_1.logger.info(`Starting A/B test`, { testId });
             return await this.abTesting.startABTest(testId);
         }
         catch (error) {
-            console.error('Error starting A/B test:', error);
+            logger_1.logger.error('Error starting A/B test', error, { testId });
             throw error;
         }
     }
     async stopABTest(testId) {
         try {
-            console.log(`Stopping A/B test: ${testId}`);
+            logger_1.logger.info(`Stopping A/B test`, { testId });
             return await this.abTesting.stopABTest(testId);
         }
         catch (error) {
-            console.error('Error stopping A/B test:', error);
+            logger_1.logger.error('Error stopping A/B test', error, { testId });
             throw error;
         }
     }
     async getABTestResults(testId) {
         try {
-            console.log(`Getting A/B test results: ${testId}`);
+            logger_1.logger.info(`Getting A/B test results`, { testId });
             return await this.abTesting.getABTestResults(testId);
         }
         catch (error) {
-            console.error('Error getting A/B test results:', error);
+            logger_1.logger.error('Error getting A/B test results', error, { testId });
             throw error;
         }
     }
     async getTestRecommendations(testId) {
         try {
-            console.log(`Getting test recommendations: ${testId}`);
+            logger_1.logger.info(`Getting test recommendations`, { testId });
             return await this.abTesting.getTestRecommendations(testId);
         }
         catch (error) {
-            console.error('Error getting test recommendations:', error);
+            logger_1.logger.error('Error getting test recommendations', error, { testId });
             throw error;
         }
     }
     async adaptContentForPlatform(content, targetPlatform) {
         try {
-            console.log(`Adapting content for ${targetPlatform}`);
+            logger_1.logger.info(`Adapting content for ${targetPlatform}`, { targetPlatform, contentId: content.id });
             const adaptedContent = { ...content };
             switch (targetPlatform) {
                 case 'twitter':
@@ -280,13 +281,13 @@ class SocialMediaManager {
             return adaptedContent;
         }
         catch (error) {
-            console.error(`Error adapting content for ${targetPlatform}:`, error);
+            logger_1.logger.error(`Error adapting content for ${targetPlatform}`, error, { targetPlatform, contentId: content.id });
             throw error;
         }
     }
     async crossPlatformPublish(content, platforms, scheduleAt) {
         try {
-            console.log(`Cross-platform publishing to ${platforms.join(', ')}`);
+            logger_1.logger.info(`Cross-platform publishing`, { platforms: platforms.join(', '), contentId: content.id });
             const results = {
                 success: [],
                 failed: [],
@@ -317,11 +318,11 @@ class SocialMediaManager {
                     });
                 }
             }
-            console.log(`Cross-platform publishing completed: ${results.success.length} successful, ${results.failed.length} failed`);
+            logger_1.logger.info(`Cross-platform publishing completed`, { success: results.success.length, failed: results.failed.length });
             return results;
         }
         catch (error) {
-            console.error('Error in cross-platform publishing:', error);
+            logger_1.logger.error('Error in cross-platform publishing', error);
             throw error;
         }
     }
@@ -374,7 +375,7 @@ class SocialMediaManager {
     }
     async getDashboardSummary() {
         try {
-            console.log('Generating dashboard summary');
+            logger_1.logger.info('Generating dashboard summary');
             const now = new Date();
             const last30Days = {
                 start: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
@@ -403,7 +404,7 @@ class SocialMediaManager {
             return summary;
         }
         catch (error) {
-            console.error('Error generating dashboard summary:', error);
+            logger_1.logger.error('Error generating dashboard summary', error);
             throw error;
         }
     }

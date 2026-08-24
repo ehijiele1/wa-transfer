@@ -14,6 +14,7 @@ export interface GenerateOptions {
 declare class OllamaService {
     private baseUrl;
     private model;
+    private httpClient;
     constructor();
     chat(messages: ChatMessage[], options?: ChatOptions): Promise<string>;
     generate(prompt: string, options?: GenerateOptions): Promise<string>;

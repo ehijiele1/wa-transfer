@@ -1,5 +1,7 @@
 import { JobScheduler } from './jobs/JobScheduler';
 import config from './config';
+import { logger } from './utils/logger';
+import { healthChecker } from './api/health';
 
 class WhatsAppMonitoringApp {
   private jobScheduler: JobScheduler;
@@ -11,8 +13,8 @@ class WhatsAppMonitoringApp {
 
   async start(): Promise<void> {
     try {
-      console.log('🚀 Starting WhatsApp Monitoring Application...');
-      console.log('📋 Configuration:', {
+      logger.info('🚀 Starting WhatsApp Monitoring Application...');
+      logger.info('📋 Configuration', {
         supabase: config.supabase.url ? 'configured' : 'missing',
         whatsapp: { sessionId: config.whatsapp.sessionId },
         monitoring: { groups: config.monitoring.groups },
@@ -21,9 +23,9 @@ class WhatsAppMonitoringApp {
 
       await this.jobScheduler.start();
       this.isRunning = true;
-      console.log('✅ WhatsApp Monitoring Application started successfully');
+      logger.info('✅ WhatsApp Monitoring Application started successfully');
     } catch (error) {
-      console.error('❌ Failed to start application:', error);
+      logger.error('❌ Failed to start application', error as Error);
       throw error;
     }
   }
@@ -31,25 +33,24 @@ class WhatsAppMonitoringApp {
 
 
 
-
   // Social Media Management Methods
   async publishToSocialMedia(content: any, platforms: string[], scheduleAt?: Date): Promise<any> {
     try {
-      console.log(`📤 Publishing to social media platforms: ${platforms.join(', ')}`);
+      logger.info(`📤 Publishing to social media platforms: ${platforms.join(', ')}`);
       
       const socialMediaJob = this.jobScheduler.getSocialMediaPublishingJob();
       const results = await socialMediaJob.publishToSocialMedia(content, platforms, scheduleAt);
       
       return results;
     } catch (error: any) {
-      console.error('❌ Error publishing to social media:', error);
+      logger.error('❌ Error publishing to social media', error, { platforms });
       return { success: false, error: error.message };
     }
   }
 
   async getSocialMediaAnalytics(platform?: string, dateRange?: any): Promise<any> {
     try {
-      console.log(`📊 Getting social media analytics for ${platform || 'all platforms'}`);
+      logger.info(`📊 Getting social media analytics for ${platform || 'all platforms'}`);
       
       const socialMediaJob = this.jobScheduler.getSocialMediaPublishingJob();
       if (dateRange) {
@@ -58,55 +59,55 @@ class WhatsAppMonitoringApp {
         return await socialMediaJob.getAnalytics();
       }
     } catch (error: any) {
-      console.error('❌ Error getting social media analytics:', error);
+      logger.error('❌ Error getting social media analytics', error, { ...(platform ? { platform } : {}), dateRange });
       return { success: false, error: error.message };
     }
   }
 
   async createSocialMediaQueue(platform: string, priority: string): Promise<any> {
     try {
-      console.log(`📦 Creating social media queue for ${platform}`);
+      logger.info(`📦 Creating social media queue for ${platform}`);
       
       const socialMediaJob = this.jobScheduler.getSocialMediaPublishingJob();
       return await socialMediaJob.createQueue(platform, priority);
     } catch (error: any) {
-      console.error('❌ Error creating social media queue:', error);
+      logger.error('❌ Error creating social media queue', error, { platform, priority });
       return { success: false, error: error.message };
     }
   }
 
   async getSocialMediaDashboard(): Promise<any> {
     try {
-      console.log('📈 Generating social media dashboard summary');
+      logger.info('📈 Generating social media dashboard summary');
       
       const socialMediaJob = this.jobScheduler.getSocialMediaPublishingJob();
       return await socialMediaJob.getDashboard();
     } catch (error: any) {
-      console.error('❌ Error generating social media dashboard:', error);
+      logger.error('❌ Error generating social media dashboard', error);
       return { success: false, error: error.message };
     }
   }
 
   async createABTest(testConfig: any): Promise<any> {
     try {
-      console.log('🧪 Creating A/B test for social media');
+      logger.info('🧪 Creating A/B test for social media');
       
       const socialMediaJob = this.jobScheduler.getSocialMediaPublishingJob();
       return await socialMediaJob.createABTest(testConfig);
     } catch (error: any) {
-      console.error('❌ Error creating A/B test:', error);
+      logger.error('❌ Error creating A/B test', error, { testConfig });
       return { success: false, error: error.message };
     }
   }
 
   async getABTestResults(testId: string): Promise<any> {
     try {
-      console.log(`📊 Getting A/B test results: ${testId}`);
+      logger.info(`📊 Getting A/B test results: ${testId}`);
       
       const socialMediaJob = this.jobScheduler.getSocialMediaPublishingJob();
       return await socialMediaJob.getABTestResults(testId);
     } catch (error: any) {
-      console.error('❌ Error getting A/B test results:', error);
+      logger.error('❌ Error getting A/B test results', error, { testId });
       return { success: false, error: error.message };
     }
   }
@@ -114,61 +115,61 @@ class WhatsAppMonitoringApp {
   // Instagram-specific methods for manual control
   async generateInstagramCarousel(propertyId: string): Promise<any> {
     try {
-      console.log(`🎨 Generating Instagram carousel for property ${propertyId}...`);
+      logger.info(`🎨 Generating Instagram carousel for property ${propertyId}...`);
       
       const contentJob = this.jobScheduler.getContentGenerationJob();
       return await contentJob.generateSingleCarousel(propertyId);
     } catch (error: any) {
-      console.error('❌ Error generating carousel for property:', error);
+      logger.error('❌ Error generating carousel for property', error, { propertyId });
       return { success: false, error: error.message };
     }
   }
 
   async publishInstagramCarousel(carouselId: string): Promise<any> {
     try {
-      console.log(`📤 Publishing Instagram carousel ${carouselId}...`);
+      logger.info(`📤 Publishing Instagram carousel ${carouselId}...`);
       
       const contentJob = this.jobScheduler.getContentGenerationJob();
       return await contentJob.publishSingleCarousel(carouselId);
     } catch (error: any) {
-      console.error('❌ Error publishing Instagram carousel:', error);
+      logger.error('❌ Error publishing Instagram carousel', error, { carouselId });
       return { success: false, error: error.message };
     }
   }
 
   async getInstagramAnalytics(): Promise<any> {
     try {
-      console.log('📊 Getting Instagram analytics...');
+      logger.info('📊 Getting Instagram analytics...');
       
       const contentJob = this.jobScheduler.getContentGenerationJob();
       return await contentJob.getInstagramAnalytics();
     } catch (error: any) {
-      console.error('❌ Error getting Instagram analytics:', error);
+      logger.error('❌ Error getting Instagram analytics', error);
       return { success: false, error: error.message };
     }
   }
 
   async batchPublishInstagram(): Promise<any> {
     try {
-      console.log('📦 Starting batch Instagram publish...');
+      logger.info('📦 Starting batch Instagram publish...');
       
       const contentJob = this.jobScheduler.getContentGenerationJob();
       return await contentJob.batchPublishCarousels();
     } catch (error: any) {
-      console.error('❌ Error in batch Instagram publish:', error);
+      logger.error('❌ Error in batch Instagram publish', error);
       return { success: false, error: error.message };
     }
   }
 
   async stop(): Promise<void> {
     try {
-      console.log('🛑 Stopping WhatsApp Monitoring Application...');
+      logger.info('🛑 Stopping WhatsApp Monitoring Application...');
       this.isRunning = false;
       
       await this.jobScheduler.stop();
-      console.log('✅ WhatsApp Monitoring Application stopped successfully');
+      logger.info('✅ WhatsApp Monitoring Application stopped successfully');
     } catch (error: any) {
-      console.error('❌ Error stopping application:', error);
+      logger.error('❌ Error stopping application', error);
       throw error;
     }
   }
@@ -183,6 +184,10 @@ class WhatsAppMonitoringApp {
 
   getHealth(): any {
     return this.jobScheduler.getHealth();
+  }
+
+  async getSystemHealth(): Promise<any> {
+    return await healthChecker.checkHealth();
   }
 
   // Manual job execution methods
@@ -203,13 +208,13 @@ async function main() {
   const app = new WhatsAppMonitoringApp();
   
   process.on('SIGINT', async () => {
-    console.log('Received SIGINT, shutting down gracefully...');
+    logger.info('Received SIGINT, shutting down gracefully...');
     await app.stop();
     process.exit(0);
   });
 
   process.on('SIGTERM', async () => {
-    console.log('Received SIGTERM, shutting down gracefully...');
+    logger.info('Received SIGTERM, shutting down gracefully...');
     await app.stop();
     process.exit(0);
   });
@@ -217,7 +222,7 @@ async function main() {
   try {
     await app.start();
   } catch (error) {
-    console.error('Application failed to start:', error);
+    logger.error('Application failed to start', error as Error);
     process.exit(1);
   }
 }
