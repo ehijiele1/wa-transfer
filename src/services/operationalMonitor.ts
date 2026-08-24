@@ -1,4 +1,5 @@
 import { logger, LogEntry } from './logger';
+import os from 'os';
 import SupabaseService from './supabase';
 import WhatsAppService from './whatsapp';
 import { getAnonClient } from './supabaseClients';
@@ -193,14 +194,19 @@ export class OperationalMonitor {
     
     try {
       const memoryUsage = process.memoryUsage();
-      const memoryPercent = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
+      // System-wide memory (a fresh Node heap is naturally ~85-90%
+      // allocated and would permanently read as degraded)
+      const totalMem = os.totalmem();
+      const freeMem = os.freemem();
+      const usedMem = totalMem - freeMem;
+      const memoryPercent = (usedMem / totalMem) * 100;
       const uptime = process.uptime();
-      
+
       const responseTime = Date.now() - startTime;
       this.recordResponseTime('System', responseTime);
 
       let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
-      
+
       if (memoryPercent > this.config.alertThresholds.memoryUsagePercent) {
         status = 'degraded';
         logger.warn('System', `High memory usage: ${memoryPercent.toFixed(2)}%`);
@@ -213,8 +219,8 @@ export class OperationalMonitor {
         details: {
           responseTime,
           memoryUsage: {
-            used: Math.round(memoryUsage.heapUsed / 1024 / 1024), // MB
-            total: Math.round(memoryUsage.heapTotal / 1024 / 1024), // MB
+            used: Math.round(usedMem / 1024 / 1024), // MB
+            total: Math.round(totalMem / 1024 / 1024), // MB
             percentage: memoryPercent.toFixed(2),
           },
           uptime: Math.round(uptime),

@@ -3,3 +3,11 @@ creds
 .git
 .env
 *.log
+wwebjs-auth
+dist
+coverage
+temp
+logs
+crewai
+*.md
+.puppeteer-cache

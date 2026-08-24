@@ -27,3 +27,4 @@ wa-transfer/wa-transfer/node_modules/
 
 # AI gateway record (contains keys)
 OLLAMA_GATEWAY.md
+supabase/.temp/

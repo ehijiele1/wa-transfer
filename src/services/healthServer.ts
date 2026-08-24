@@ -16,8 +16,10 @@ export class HealthServer {
 
   constructor(config: Partial<HealthServerConfig> = {}) {
     this.config = {
-      port: 3001,
-      host: 'localhost',
+      // Bind all interfaces by default: inside containers the server must be
+      // reachable via IPv4 (localhost would bind ::1 only and break health probes)
+      port: Number(process.env.HEALTH_SERVER_PORT) || 3001,
+      host: process.env.HEALTH_SERVER_HOST || '0.0.0.0',
       enableCors: true,
       logRequests: true,
       ...config,

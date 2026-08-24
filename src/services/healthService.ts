@@ -161,9 +161,13 @@ export class HealthService {
 
   private async checkMemoryUsage(): Promise<boolean> {
     try {
-      const memoryUsage = process.memoryUsage();
-      const memoryPercent = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
-      
+      // Use system-wide memory, not the Node heap (a fresh heap is
+      // naturally 80-90% allocated and would always read as degraded)
+      const os = await import('os');
+      const total = os.totalmem();
+      const free = os.freemem();
+      const memoryPercent = ((total - free) / total) * 100;
+
       if (memoryPercent > 90) {
         logger.error('HealthCheck', 'Critical memory usage', { memoryPercent: memoryPercent.toFixed(2) });
         return false;

@@ -27,6 +27,7 @@ services:
       
       # AI Configuration
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama2}
       
       # Monitoring Configuration
@@ -92,12 +93,10 @@ services:
     # Security hardening
     security_opt:
       - no-new-privileges:true
-      - apparmor:wa-transfer-profile
       
     read_only: true
     tmpfs:
       - /tmp
-      - /app/wwebjs-auth
       
     # User and group configuration
     user: "1000:1000"
@@ -138,6 +137,8 @@ services:
     command: redis-server --appendonly yes
 
 volumes:
+  wa-transfer-redis-data:
+    driver: local
   wa-transfer-data:
     driver: local
   wa-transfer-logs:

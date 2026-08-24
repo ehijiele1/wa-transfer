@@ -25,7 +25,8 @@ export class QueueManager {
   constructor() {
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
     this.redis = new Redis(redisUrl, {
-      maxRetriesPerRequest: 3,
+      // BullMQ requires null here (workers use blocking commands)
+      maxRetriesPerRequest: null,
       retryStrategy: (times) => {
         const delay = Math.min(times * 500, 3000);
         return delay;

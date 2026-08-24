@@ -2,6 +2,7 @@ import { JobScheduler } from './jobs/JobScheduler';
 import config from './config';
 import { logger } from './utils/logger';
 import { healthChecker } from './api/health';
+import { healthServer, stopHealthServer } from './services/healthServer';
 
 class WhatsAppMonitoringApp {
   private jobScheduler: JobScheduler;
@@ -22,6 +23,7 @@ class WhatsAppMonitoringApp {
       });
 
       await this.jobScheduler.start();
+      await healthServer.start();
       this.isRunning = true;
       logger.info('✅ WhatsApp Monitoring Application started successfully');
     } catch (error) {
@@ -167,6 +169,7 @@ class WhatsAppMonitoringApp {
       this.isRunning = false;
       
       await this.jobScheduler.stop();
+      await stopHealthServer();
       logger.info('✅ WhatsApp Monitoring Application stopped successfully');
     } catch (error: any) {
       logger.error('❌ Error stopping application', error);

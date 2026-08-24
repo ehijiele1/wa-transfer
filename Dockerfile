@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     libgbm1 \
     libxkbcommon0 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app user
@@ -38,12 +39,17 @@ WORKDIR /app
 
 # Stage: Build dependencies
 FROM base AS deps
+ENV PUPPETEER_CACHE_DIR=/app/.puppeteer-cache
 COPY package*.json ./
-RUN npm ci --only=production
+# Skip lifecycle scripts: no src/ yet so prepare-build would fail;
+# Chromium is downloaded explicitly instead of via postinstall.
+RUN npm ci --ignore-scripts \
+    && npx puppeteer browsers install chrome
 
 # Stage: Build application
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/.puppeteer-cache /app/.puppeteer-cache
 COPY . .
 
 # Build the application
@@ -58,6 +64,7 @@ FROM base AS production
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/.puppeteer-cache /app/.puppeteer-cache
 
 # Copy configuration files (not secrets)
 COPY --chown=appuser:appuser docker/config ./config
@@ -82,6 +89,7 @@ EXPOSE 3001
 ENV NODE_ENV=production
 ENV PORT=3001
 ENV HEALTH_PORT=3001
+ENV PUPPETEER_CACHE_DIR=/app/.puppeteer-cache
 
 # Run the application
 CMD ["/app/entrypoint.sh"]
