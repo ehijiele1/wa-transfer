@@ -7,10 +7,21 @@ ADD COLUMN IF NOT EXISTS from_number TEXT,
 ADD COLUMN IF NOT EXISTS to_number TEXT;
 
 -- Ensure existing data is migrated (if needed)
-UPDATE whatsapp_messages 
-SET from_number = from, 
-    to_number = to
-WHERE from_number IS NULL OR to_number IS NULL;
+-- Legacy tables used from_number/to_number directly (no from/to columns ever existed),
+-- so this backfill is conditional and safely skips when legacy columns are absent.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'whatsapp_messages'
+      AND column_name = 'from'
+  ) THEN
+    EXECUTE 'UPDATE whatsapp_messages
+             SET from_number = "from", to_number = "to"
+             WHERE from_number IS NULL OR to_number IS NULL';
+  END IF;
+END $$;
 
 -- Add missing columns from property_listings table
 ALTER TABLE property_listings 
