@@ -1,18 +1,18 @@
 /**
  * Tests for Circuit Breaker utility
  */
-import { CircuitBreaker } from '../../src/utils/circuitBreaker';
+import { CircuitBreaker, CircuitState } from '../../src/utils/circuitBreaker';
 
 describe('CircuitBreaker', () => {
   let breaker: CircuitBreaker;
 
   beforeEach(() => {
-    breaker = new CircuitBreaker({ failureThreshold: 3, resetTimeoutMs: 1000, name: 'test' });
+    breaker = new CircuitBreaker('test', { failureThreshold: 3, resetTimeout: 1000 });
   });
 
   describe('initial state', () => {
     it('should start in CLOSED state', () => {
-      expect(breaker.getState()).toBe('CLOSED');
+      expect(breaker.getState()).toBe(CircuitState.CLOSED);
     });
   });
 
@@ -24,7 +24,7 @@ describe('CircuitBreaker', () => {
 
     it('should remain CLOSED after success', async () => {
       await breaker.execute(async () => 'ok');
-      expect(breaker.getState()).toBe('CLOSED');
+      expect(breaker.getState()).toBe(CircuitState.CLOSED);
     });
   });
 
@@ -37,7 +37,7 @@ describe('CircuitBreaker', () => {
           // expected
         }
       }
-      expect(breaker.getState()).toBe('OPEN');
+      expect(breaker.getState()).toBe(CircuitState.OPEN);
     });
 
     it('should reject immediately when OPEN', async () => {

@@ -1,24 +1,13 @@
 /**
  * Tests for Logger utility
  */
-import { Logger, createLogger } from '../../src/utils/logger';
+import { logger } from '../../src/utils/logger';
 
 describe('Logger', () => {
-  let logger: Logger;
-
-  beforeEach(() => {
-    logger = createLogger({ level: 'debug', enableConsole: false });
-  });
-
   describe('log levels', () => {
-    it('should create logger with default level', () => {
-      const l = createLogger({ enableConsole: false });
-      expect(l).toBeDefined();
-    });
-
-    it('should respect log level filtering', () => {
-      const warnLogger = createLogger({ level: 'warn', enableConsole: false });
-      expect(warnLogger).toBeDefined();
+    it('should expose the singleton logger', () => {
+      expect(logger).toBeDefined();
+      expect(typeof logger.info).toBe('function');
     });
 
     it('should accept debug level', () => {
@@ -42,6 +31,7 @@ describe('Logger', () => {
     it('should create child logger with context', () => {
       const child = logger.child({ module: 'test' });
       expect(child).toBeDefined();
+      expect(typeof child.info).toBe('function');
     });
 
     it('should propagate context to child logger', () => {
