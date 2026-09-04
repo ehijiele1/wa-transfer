@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.operationalMonitor = exports.OperationalMonitor = void 0;
 const logger_1 = require("./logger");
+const os_1 = __importDefault(require("os"));
 const supabase_1 = __importDefault(require("./supabase"));
 const supabaseClients_1 = require("./supabaseClients");
 class OperationalMonitor {
@@ -146,7 +147,10 @@ class OperationalMonitor {
         const startTime = Date.now();
         try {
             const memoryUsage = process.memoryUsage();
-            const memoryPercent = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
+            const totalMem = os_1.default.totalmem();
+            const freeMem = os_1.default.freemem();
+            const usedMem = totalMem - freeMem;
+            const memoryPercent = (usedMem / totalMem) * 100;
             const uptime = process.uptime();
             const responseTime = Date.now() - startTime;
             this.recordResponseTime('System', responseTime);
@@ -162,8 +166,8 @@ class OperationalMonitor {
                 details: {
                     responseTime,
                     memoryUsage: {
-                        used: Math.round(memoryUsage.heapUsed / 1024 / 1024),
-                        total: Math.round(memoryUsage.heapTotal / 1024 / 1024),
+                        used: Math.round(usedMem / 1024 / 1024),
+                        total: Math.round(totalMem / 1024 / 1024),
                         percentage: memoryPercent.toFixed(2),
                     },
                     uptime: Math.round(uptime),

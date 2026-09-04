@@ -3,13 +3,17 @@ import config from './config';
 import { logger } from './utils/logger';
 import { healthChecker } from './api/health';
 import { healthServer, stopHealthServer } from './services/healthServer';
+import { whatsappService } from './services/whatsapp';
+import { MessageProcessingJob } from './jobs/MessageProcessingJob';
 
 class WhatsAppMonitoringApp {
   private jobScheduler: JobScheduler;
+  private messageJob: MessageProcessingJob;
   private isRunning: boolean = false;
 
   constructor() {
     this.jobScheduler = new JobScheduler();
+    this.messageJob = new MessageProcessingJob();
   }
 
   async start(): Promise<void> {
@@ -24,6 +28,8 @@ class WhatsAppMonitoringApp {
 
       await this.jobScheduler.start();
       await healthServer.start();
+      // Start WhatsApp message processing (uses shared singleton, connects if needed)
+      this.messageJob.start().catch(e => logger.warn('MessageProcessingJob start failed, will retry via health checks', { error: (e as Error).message }));
       this.isRunning = true;
       logger.info('✅ WhatsApp Monitoring Application started successfully');
     } catch (error) {
@@ -168,6 +174,7 @@ class WhatsAppMonitoringApp {
       logger.info('🛑 Stopping WhatsApp Monitoring Application...');
       this.isRunning = false;
       
+      await this.messageJob.stop().catch(() => {});
       await this.jobScheduler.stop();
       await stopHealthServer();
       logger.info('✅ WhatsApp Monitoring Application stopped successfully');

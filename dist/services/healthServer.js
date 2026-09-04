@@ -4,14 +4,15 @@ exports.stopHealthServer = exports.startHealthServer = exports.healthServer = ex
 const healthService_1 = require("./healthService");
 const logger_1 = require("./logger");
 const http_1 = require("http");
+const whatsapp_1 = require("./whatsapp");
 class HealthServer {
     config;
     server = null;
     intervals = [];
     constructor(config = {}) {
         this.config = {
-            port: 3001,
-            host: 'localhost',
+            port: Number(process.env.HEALTH_SERVER_PORT) || 3001,
+            host: process.env.HEALTH_SERVER_HOST || '0.0.0.0',
             enableCors: true,
             logRequests: true,
             ...config,
@@ -157,6 +158,22 @@ class HealthServer {
             this.createErrorResponse(res, 'Internal server error', 500);
         }
     }
+    async handleGroupsRequest(req, res) {
+        try {
+            if (req.method !== 'GET') {
+                this.createErrorResponse(res, 'Method not allowed', 405);
+                return;
+            }
+            const groups = await whatsapp_1.whatsappService.getGroups();
+            this.createJsonResponse(res, { count: groups.length, groups });
+        }
+        catch (error) {
+            logger_1.logger.error('HealthServer', 'Groups request failed', {
+                error: error instanceof Error ? error.message : String(error),
+            });
+            this.createErrorResponse(res, error instanceof Error ? error.message : 'Failed to fetch groups', 500);
+        }
+    }
     async handleRootRequest(req, res) {
         try {
             if (req.method !== 'GET') {
@@ -227,6 +244,9 @@ class HealthServer {
             }
             else if (url === '/metrics') {
                 this.handleMetricsRequest(req, res);
+            }
+            else if (url === '/groups' || url === '/api/groups') {
+                this.handleGroupsRequest(req, res);
             }
             else if (url === '/' || url === '/health') {
                 this.handleRootRequest(req, res);

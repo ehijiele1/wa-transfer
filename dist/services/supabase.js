@@ -41,8 +41,8 @@ class SupabaseService {
             .from('whatsapp_messages')
             .insert({
             id: message.id,
-            from: message.from,
-            to: message.to,
+            from_number: message.from,
+            to_number: message.to,
             timestamp: message.timestamp,
             message: message.message,
             type: message.type,
@@ -60,8 +60,8 @@ class SupabaseService {
                 .from('whatsapp_messages')
                 .insert({
                 id: message.id,
-                from: message.from,
-                to: message.to,
+                from_number: message.from,
+                to_number: message.to,
                 timestamp: message.timestamp,
                 message: message.message,
                 type: message.type,

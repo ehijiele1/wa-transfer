@@ -1,5 +1,6 @@
 declare class WhatsAppMonitoringApp {
     private jobScheduler;
+    private messageJob;
     private isRunning;
     constructor();
     start(): Promise<void>;

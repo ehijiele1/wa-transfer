@@ -1,279 +1,228 @@
-# Continuation Guide for wa-transfer Remediation
-**Last Updated:** 2026-07-30  
-**Current Status:** 71% complete (12/17 items done)  
-**Next LLM/Agent:** Read this file first to understand where we are
+# Continuation Guide for wa-transfer
+> **Last Updated:** 2026-09-03
+> **Current Status:** Phase 0 Complete, Phase 1 Ready
+> **Next LLM/Agent:** Read `MASTER_DOCUMENTATION.md` FIRST, then this file
 
 ---
 
-## Project Context
+## PROJECT CONTEXT
 
-This is a **WhatsApp Business Intelligence & Social Media Automation System** called `wa-transfer`. It monitors WhatsApp groups for real estate listings, uses Ollama LLMs for classification, stores data in Supabase, and automates publishing to Instagram, Facebook, Twitter, and LinkedIn.
+**wa-transfer** is a WhatsApp Business Intelligence & Social Media Automation System. It monitors WhatsApp groups for real estate listings, uses AI (Ollama) for classification, stores data in Supabase, and automates publishing to Instagram/Facebook/Twitter/LinkedIn.
 
 **Repository:** `c:/Users/ehiji/OneDrive/Desktop/WebApps/wa-transfer`
 
 ---
 
-## What Has Been Completed
+## MASTER FILE HIERARCHY
 
-### Code Changes (All P0/P1 Blockers)
-1. ✅ Structured logging - all 11 service files migrated
-2. ✅ Fetch timeouts - `src/utils/fetchWithTimeout.ts` created and integrated
-3. ✅ Circuit breakers - `src/utils/circuitBreaker.ts` created, imported in platform adapters
-4. ✅ Input validation - `src/utils/inputValidator.ts` created (SSRF/XSS protection)
-5. ✅ Least-privilege Supabase - `src/services/supabase.ts` split into anon/service clients
-6. ✅ Persistent job queues - BullMQ + Redis implementation in `src/queues/`
-7. ✅ Job scheduler - `src/jobs/JobScheduler.ts` created with node-cron
-8. ✅ Health checks - `src/api/health.ts` created
-9. ✅ Container hardening - `docker-compose.yml` updated with security config
-
-### Files Modified/Created
-- `src/utils/logger.ts` - NEW
-- `src/utils/fetchWithTimeout.ts` - NEW
-- `src/utils/circuitBreaker.ts` - NEW
-- `src/utils/inputValidator.ts` - NEW
-- `src/queues/queueManager.ts` - NEW
-- `src/queues/processors.ts` - NEW
-- `src/jobs/JobScheduler.ts` - NEW
-- `src/api/health.ts` - NEW
-- `src/services/supabase.ts` - MODIFIED (split clients)
-- `src/services/*.ts` - MODIFIED (all migrated to logger)
-- `docker-compose.yml` - MODIFIED (Redis enabled, security hardened)
-- `package.json` - MODIFIED (new dependencies: bullmq, ioredis, zod, pino, pino-pretty)
-
----
-
-## What Remains Incomplete
-
-### Critical (P0/P1) - Must Complete Before Production
-1. **Wire JobScheduler into index.ts** (P0-1, P1-6)
-   - `src/index.ts` currently creates JobScheduler but doesn't fully integrate it
-   - Replace remaining `setInterval` calls with JobScheduler cron jobs
-   - Verify `start()` and `stop()` properly manage JobScheduler lifecycle
-
-2. **Add circuit breakers to remaining fetch() calls** (P0-5)
-   - `src/services/platformAdapters.ts`: FacebookAdapter, TwitterAdapter, LinkedInAdapter fetch calls need circuit breaker wrappers
-   - `src/services/instagramMedia.ts`: All fetch calls need `instagramCircuitBreaker`
-   - Utilities are ready, just need to wrap the actual API calls
-
-3. **Add input validation to message processing** (P0-4)
-   - `src/services/messageProcessor.ts`: Add `inputValidator` before AI classification
-   - Validate WhatsApp message text, media URLs, sender info
-
-4. **Add database constraints for idempotency** (P1-7)
-   - Add `idempotency_key` column to `social_media_scheduled_posts` table
-   - Create unique constraint on `idempotency_key` where `status = 'published'`
-   - Update `src/services/socialMediaScheduler.ts` to use DB constraints
-
-5. **Remove duplicate `wa-transfer/` folder** (P2-11)
-   - Blocked by terminal unavailability
-   - Manual command: `rm -rf wa-transfer/`
-
-6. **Install dependencies and build** (P0-1)
-   - Blocked by terminal unavailability
-   - Manual commands:
-     ```bash
-     npm install
-     npm run build
-     npm start
-     ```
-
-### Nice-to-Have (P2) - Defer to Post-Launch
-7. **Write automated tests** (P2-12)
-   - Unit tests for utilities
-   - Integration tests for message flow and publishing
-   - Target: >70% coverage
-
-8. **Add rate limiting** (P2-13)
-   - Use `bottleneck` library or token bucket in `src/utils/rateLimiter.ts`
-   - Apply to all external API calls
-
-9. **Content policy layer** (P1-10)
-   - Create `src/policy/contentPolicy.ts`
-   - Profanity filter, blocked terms
-   - Human-in-the-loop approval for AI-generated content
-
----
-
-## Current State of Key Files
-
-### src/index.ts
-- ✅ Uses `JobScheduler`
-- ✅ Uses `logger`
-- ⚠️ Still has some `setInterval` patterns that need replacement
-- ⚠️ Needs full wiring to JobScheduler lifecycle
-
-### src/services/platformAdapters.ts
-- ✅ Imports circuit breakers and fetchWithTimeout
-- ✅ BasePlatformAdapter uses logger
-- ✅ FacebookAdapter uses logger
-- ⚠️ `publish()` methods still use raw `fetch()` - needs circuit breaker wrapper
-- ⚠️ TwitterAdapter and LinkedInAdapter need circuit breakers
-
-### src/services/instagramMedia.ts
-- ✅ Imports circuit breakers and fetchWithTimeout
-- ✅ Uses logger
-- ✅ `uploadImage()` uses `fetchWithTimeout`
-- ⚠️ `createCarouselContainer()`, `publishCarousel()`, `getMediaStatus()` need circuit breakers
-
-### src/services/messageProcessor.ts
-- ✅ Imports logger and fetchWithTimeout
-- ✅ `classifyWithOllama()` uses fetchWithTimeout
-- ⚠️ Needs `inputValidator` integration before classification
-
-### src/services/socialMediaScheduler.ts
-- ✅ Uses logger throughout
-- ✅ Has idempotency checks (but needs DB constraints)
-- ✅ Uses RetryHelper with exponential backoff
-
----
-
-## How to Continue This Work
-
-### If Using CrewAI (Recommended)
-
-The CrewAI crew is already configured in `crewai/`:
-- `crewai/agents.yaml` - 6 specialized agents
-- `crewai/tasks.yaml` - 8 tasks
-- `crewai/crew.py` - Orchestration script
-
-**To run:**
-```bash
-cd c:/Users/ehiji/OneDrive/Desktop/WebApps/wa-transfer/crewai
-pip install -r requirements.txt
-export OPENAI_API_KEY=your-api-key
-python crew.py
+```
+START HERE (always)
+    │
+    ▼
+MASTER_DOCUMENTATION.md ← Single source of truth
+    │
+    ├── README.md ← Quick start guide
+    ├── CONTINUATION_GUIDE.md ← This file (session handoff)
+    ├── REMEDIATION_SUMMARY.md ← What's done vs pending
+    ├── ARCHITECTURE_AUDIT_REPORT.md ← Deep architecture analysis
+    ├── P0_VERIFICATION_REPORT.md ← Critical fix verification
+    └── OLLAMA_GATEWAY.md ← AI gateway setup
 ```
 
-The crew will execute these tasks in order:
-1. wire_jobscheduler
-2. add_circuit_breakers
-3. add_input_validation
-4. add_instagram_circuit_breakers
-5. write_utility_tests
-6. write_integration_tests
-7. verify_typescript
-8. final_quality_review
-
-### If Continuing Manually
-
-Follow the checklist in `REMEDIATION_SUMMARY.md` under "Code Changes Needed".
-
-Priority order:
-1. Wire JobScheduler into index.ts
-2. Add circuit breakers to platform adapters
-3. Add circuit breakers to instagramMedia.ts
-4. Add input validation to messageProcessor.ts
-5. Run `npm install` and `npm run build`
-6. Write tests
-
-### If Another LLM Takes Over
-
-1. Read this file first
-2. Read `REMEDIATION_SUMMARY.md` for detailed status
-3. Read `ARCHITECTURE_AUDIT_REPORT.md` for context
-4. Check `crewai/tasks.yaml` for specific task definitions
-5. Start with task 1 (wire_jobscheduler) and proceed sequentially
+**Rule:** When switching LLM sessions, ALWAYS read `MASTER_DOCUMENTATION.md` first. It references all other files.
 
 ---
 
-## Important Environment Details
+## WHAT'S BEEN DONE (As of 2026-09-03)
 
-- **OS:** Windows 10
-- **Node:** 20+ required
-- **Python:** 3.10+ for CrewAI
-- **Redis:** Required for BullMQ (not running yet)
-- **Supabase:** PostgreSQL database (credentials in .env)
-- **LLM:** OpenAI GPT-4 or Ollama (llama3.1:70b) for CrewAI agents
-- **Working Directory:** `c:/Users/ehiji/OneDrive/Desktop/WebApps/wa-transfer`
+### Phase 0: Group Registration ✅ COMPLETE
+- [x] Created `monitored_groups` Supabase table + RLS + indexes
+- [x] Created `register_group()` and `is_group_monitored()` SQL functions
+- [x] Built `GroupManager` service with in-memory cache (60s TTL)
+- [x] Added "WATM Good Afternoon" trigger handler in WhatsApp service
+- [x] Silent registration (no reply in group)
+- [x] Defense-in-depth filter in MessageProcessingJob
+- [x] CLI utility: `npm run groups:list`
+- [x] 12 unit tests for GroupManager — all passing
+- [x] Documentation updated (MASTER_DOCUMENTATION.md)
+
+### Backend Infrastructure ✅
+- [x] TypeScript compilation passes (`npm run typecheck` — zero errors)
+- [x] Build succeeds (`npm run build`)
+- [x] Structured logging (Pino) — all 11 service files migrated
+- [x] Fetch timeouts — `src/utils/fetchWithTimeout.ts`
+- [x] Circuit breakers — `src/utils/circuitBreaker.ts` (7 instances)
+- [x] Input validation — `src/utils/inputValidator.ts` + `src/services/inputGuard.ts`
+- [x] SSRF protection — `src/services/urlGuard.ts`
+- [x] Least-privilege Supabase — anon/service client split
+- [x] BullMQ + Redis job queues — `src/queues/queueManager.ts`
+- [x] Node-cron job scheduler — `src/jobs/JobScheduler.ts`
+- [x] Health server (port 3001) — `src/services/healthServer.ts`
+- [x] Container hardening — `docker-compose.yml` with security options
+- [x] Dependencies installed — `node_modules/` present (494 packages)
+- [x] Build output populated — `dist/` folder complete
+
+### Documentation ✅
+- [x] `MASTER_DOCUMENTATION.md` — Single source of truth (updated for Phase 0)
+- [x] `README.md` — Comprehensive project documentation
+- [x] `ARCHITECTURE_AUDIT_REPORT.md` — Deep architecture analysis
+- [x] Outdated markdown files removed (4 files deleted)
+
+### Code Fixes ✅
+- [x] `jest.config.js` — Fixed `moduleNameMapping` → `moduleNameMapper`
+- [x] Duplicate `wa-transfer/` folder — Removed
 
 ---
 
-## Quick Reference Commands
+## WHAT REMAINS (Prioritized)
+
+### ✅ Phase 0: Group Registration (COMPLETE — 2026-09-03)
+- ✅ Created `monitored_groups` Supabase table
+- ✅ Built `GroupManager` service with cache
+- ✅ Added "WATM Good Afternoon" trigger handler
+- ✅ Defense-in-depth filter in MessageProcessingJob
+- ✅ CLI utility + unit tests
+- ✅ Documentation updated
+- **Next:** Deploy to Oracle VM and test end-to-end
+
+### Phase 1: Multi-Layer Product Filters (NEXT — Start now)
+1. Create `user_preferences` Supabase table
+2. Build property filter engine (type, price, location, bedrooms)
+3. Build developer matching (Pertinence Group, OG Holdings, etc.)
+4. Build investment criteria filter (ROI, payment plan, title type)
+5. Enhance Ollama to interpret natural language preferences
+6. Add confidence scoring (≥0.8 = auto-publish, <0.8 = manual review)
+
+### P0 — Critical (Remaining backend)
+1. **Deploy Phase 0 to Oracle VM** — Test end-to-end
+2. **SSH keys in repo root** — `ssh-wa-transfer-backup.key` cannot be deleted (OneDrive lock). KEEP — needed for Oracle VM access.
+3. **Wire remaining circuit breakers** — `platformAdapters.ts` (Facebook/Twitter/LinkedIn publish methods) and `instagramMedia.ts` still use raw `fetch()`.
+
+### P1 — High Priority
+4. **Web Management Dashboard** — See `MASTER_DOCUMENTATION.md` Section 7-8 for full plan.
+5. **Fix `bulkPublish` with 'all' platform** — Currently only publishes to Facebook, should publish to all platforms.
+6. **Consolidate duplicate loggers** — `utils/logger.ts` vs `services/logger.ts` — choose one.
+7. **Wire rate limiter** — `src/utils/rateLimiter.ts` created but not used by any service.
+
+### P2 — Nice to Have
+8. **Write more automated tests** — Expand beyond GroupManager (currently 12 tests)
+9. **Fix hardcoded analytics** — `socialMediaAnalytics.ts` returns dummy data
+10. **Fix A/B test persistence** — Currently in-memory only, lost on restart
+11. **Content policy layer** — Profanity filter, human-in-the-loop approval
+
+---
+
+## WEB DASHBOARD — NEW INITIATIVE
+
+### Summary
+A Next.js web application for managing wa-transfer remotely from phone/browser.
+
+### Tech Stack
+- **Frontend:** Next.js 14 + Tailwind CSS + shadcn/ui
+- **Auth:** NextAuth.js + Supabase Auth
+- **API:** Next.js API Routes + tRPC
+- **Database:** Supabase (existing)
+- **Mobile:** Responsive PWA
+
+### Implementation Phases
+| Phase | Duration | Focus |
+|-------|----------|-------|
+| 1 | Week 1 | Foundation (Next.js, Auth, Layout) |
+| 2 | Week 2 | Core Dashboard (Overview, Messages, Properties) |
+| 3 | Week 3 | Content Management (Carousels, Queue, Publishing) |
+| 4 | Week 4 | Analytics & Settings |
+| 5 | Week 5 | Mobile & Polish (PWA, Offline, Push) |
+| 6 | Week 6 | Deployment & Security |
+
+**Full plan:** See `MASTER_DOCUMENTATION.md` Section 8
+
+---
+
+## HOW TO CONTINUE
+
+### If Starting a New Session
+1. Read `MASTER_DOCUMENTATION.md` (required — single source of truth)
+2. Read this file (`CONTINUATION_GUIDE.md`)
+3. Check `REMEDIATION_SUMMARY.md` for pending items
+4. Start with P0 items, then P1, then P2
+
+### If Working on Web Dashboard
+1. Read `MASTER_DOCUMENTATION.md` Sections 7-8
+2. Start with Phase 1: Initialize Next.js project
+3. Update this file and `MASTER_DOCUMENTATION.md` after each phase
+
+### If Fixing Backend Issues
+1. Read `MASTER_DOCUMENTATION.md` Section 9 (Known Issues)
+2. Read `ARCHITECTURE_AUDIT_REPORT.md` for context
+3. Fix issues, then update this file
+
+---
+
+## ENVIRONMENT DETAILS
+
+| Item | Value |
+|------|-------|
+| OS | Windows 10 |
+| Node.js | 20+ required |
+| Python | 3.10+ (for CrewAI) |
+| Redis | Required for BullMQ |
+| Supabase | PostgreSQL (credentials in .env) |
+| Ollama | Optional (for AI features) |
+| Working Dir | `c:/Users/ehiji/OneDrive/Desktop/WebApps/wa-transfer` |
+
+---
+
+## QUICK COMMANDS
 
 ```bash
-# Install dependencies
+# Install
 npm install
-
-# Type check
-npm run typecheck
 
 # Build
 npm run build
 
-# Run application
+# Run
 npm start
 
-# Run CrewAI remediation
-cd crewai && python crew.py
+# Dev mode
+npm run dev
 
-# Start Redis (if using Docker)
-docker-compose up -d redis
+# Type check
+npm run typecheck
 
-# Check health endpoint
+# Health check
 curl http://localhost:3001/health
+
+# Start Redis
+docker run -d --name redis -p 6379:6379 redis:7-alpine
 ```
 
 ---
 
-## File Structure After Cleanup
+## SUCCESS CRITERIA
 
-```
-wa-transfer/
-├── ARCHITECTURE_AUDIT_REPORT.md (main audit report)
-├── REMEDIATION_SUMMARY.md (current status + next steps)
-├── CONTINUATION_GUIDE.md (this file - for handoffs)
-├── crewai/
-│   ├── requirements.txt
-│   ├── agents.yaml
-│   ├── tasks.yaml
-│   ├── crew.py
-│   └── README.md
-├── src/ (all source code)
-├── supabase/ (SQL schemas)
-├── package.json
-├── tsconfig.json
-├── docker-compose.yml
-└── ...
-```
-
-**Removed files (consolidated):**
-- `FINAL_REMEDIATION_REPORT.md` - merged into REMEDIATION_SUMMARY.md
-- `REMEDIATION_COMPLETE.md` - merged into REMEDIATION_SUMMARY.md
-- `REMEDIATION_PLAN_MAI-Code-1-Flash_2026-07-26.md` - outdated
-- `AUDIT_MAI-Code-1-Flash_2026-07-26.md` - outdated
-
----
-
-## Success Criteria for Completion
-
-The project is production-ready when:
-- [ ] `npm run typecheck` passes with zero errors
-- [ ] `npm run build` succeeds
-- [ ] `npm start` launches without errors
+### Backend (Current)
+- [x] `npm run typecheck` passes
+- [x] `npm run build` succeeds
+- [ ] `npm start` launches without errors (needs Redis + Supabase)
 - [ ] Health endpoint returns `{"status": "healthy"}`
-- [ ] Redis connection established
-- [ ] No `console.*` calls in `src/`
-- [ ] All external API calls have timeouts
-- [ ] All external API calls have circuit breakers
-- [ ] Input validation covers all entry points
-- [ ] JobScheduler fully integrated
-- [ ] Tests pass (if written)
-- [ ] `wa-transfer/` duplicate folder removed
+- [ ] All circuit breakers wired
+- [ ] Input validation on all entry points
+- [ ] SSH keys removed from repo
+
+### Web Dashboard (New)
+- [ ] Next.js project initialized
+- [ ] Authentication working
+- [ ] Dashboard overview page
+- [ ] Property management
+- [ ] Carousel preview/approve
+- [ ] Social media queue
+- [ ] Analytics charts
+- [ ] Mobile-responsive
+- [ ] PWA installable
+- [ ] Deployed to production
 
 ---
 
-## Contact/Handoff Notes
-
-**If you're an LLM continuing this work:**
-- The previous session ran out of rate limits before completing all tasks
-- CrewAI is set up and ready to run
-- All code infrastructure is in place, just needs wiring and verification
-- Estimated time to complete: 2-3 hours with CrewAI, 4-6 hours manually
-- Do NOT regenerate the architecture audit - it's complete in `ARCHITECTURE_AUDIT_REPORT.md`
-- Do NOT regenerate old reports - focus on the pending tasks in `REMEDIATION_SUMMARY.md`
-
-**Priority:** Complete the 6 critical items listed above, then test, then deploy.
-
----
-
-*This file was auto-generated to ensure continuity across LLM sessions.*
+*This file ensures continuity across LLM sessions. Always update it when making changes.*
+*Last updated: 2026-09-03*

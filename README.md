@@ -4,6 +4,24 @@
 
 wa-transfer is a comprehensive system that monitors WhatsApp groups for real estate listings and promotional offers, extracts information, generates Instagram carousel marketing content, and publishes to multiple social media platforms. Built with TypeScript, Node.js, and Supabase.
 
+## 🎯 Registering a Group (Quick Start)
+
+To start monitoring a WhatsApp group, send the exact message below in that group:
+
+```
+WATM Good Afternoon
+```
+
+The bot registers the group **silently** (no reply sent). All future messages in that group will be processed. To see registered groups:
+
+```bash
+npm run groups:list           # Human-readable
+npm run groups:list:json      # JSON output
+npm run groups:list:active    # Only active groups
+```
+
+See [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) for full details.
+
 ## 🚀 Features
 
 ### Core Functionality
@@ -103,6 +121,23 @@ npm run dev
 
 # Production mode
 npm start
+```
+
+### Group Management (Phase 0)
+```bash
+# List all monitored groups
+npm run groups:list
+
+# List as JSON
+npm run groups:list:json
+
+# List only active groups
+npm run groups:list:active
+
+# Unregister a group
+npm run groups:unregister -- 120363@g.us
+
+# Register a new group: send "WATM Good Afternoon" in the group from WhatsApp
 ```
 
 ### CLI Commands
@@ -305,6 +340,18 @@ journalctl -u wa-transfer -f
    # Regenerate session
    node get-session.js
    ```
+
+3. **Group Not Being Monitored**
+   ```bash
+   # List monitored groups
+   npm run groups:list
+   
+   # Check if the group is registered
+   # If not, send "WATM Good Afternoon" in the group
+   # Trigger is case-insensitive, whitespace-trimmed, exact phrase only
+   ```
+   
+   See [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) Section 2 for the registration flow.
 
 3. **Social Media API Errors**
    ```bash

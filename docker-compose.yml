@@ -28,6 +28,8 @@ services:
       # AI Configuration
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      # Chromium needs a writable HOME on a read-only rootfs
+      HOME: /tmp
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama2}
       
       # Monitoring Configuration
@@ -61,7 +63,7 @@ services:
       # Persistent data
       - wa-transfer-data:/app/data
       - wa-transfer-logs:/app/logs
-      - wa-transfer-sessions:/app/wwebjs-auth
+      - ./wwebjs-auth:/app/wwebjs-auth
       
       # Read-only configuration mount (secrets managed externally)
       - ./docker/config:/app/config:ro
@@ -142,8 +144,6 @@ volumes:
   wa-transfer-data:
     driver: local
   wa-transfer-logs:
-    driver: local
-  wa-transfer-sessions:
     driver: local
   # wa-transfer-db-data:
   #   driver: local

@@ -1,9 +1,12 @@
-import WhatsAppService from '../services/whatsapp';
+import { whatsappService } from '../services/whatsapp';
 import SupabaseService from '../services/supabase';
 import MessageProcessor, { MessageClassification } from '../services/messageProcessor';
 import { getInputGuard } from '../services/inputGuard';
+import { groupManager } from '../services/groupManager';
 import { WhatsAppMessage } from '../types';
 import { log } from '../services/logger';
+import { logger } from '../utils/logger';
+import WhatsAppService from '../services/whatsapp';
 
 export class MessageProcessingJob {
   private whatsappService: WhatsAppService;
@@ -13,7 +16,7 @@ export class MessageProcessingJob {
   private isRunning: boolean = false;
 
   constructor() {
-    this.whatsappService = new WhatsAppService();
+    this.whatsappService = whatsappService;
     this.supabaseService = new SupabaseService();
     this.messageProcessor = new MessageProcessor();
     this.inputGuard = getInputGuard();
@@ -23,6 +26,15 @@ export class MessageProcessingJob {
     const startTime = Date.now();
     try {
       log.info('MessageProcessingJob', 'Starting Message Processing Job');
+      // Warm up the group cache before connecting WhatsApp
+      try {
+        await groupManager.refreshCache();
+        log.info('MessageProcessingJob', 'Group cache warmed up');
+      } catch (e) {
+        log.warn('MessageProcessingJob', 'Failed to warm up group cache; will lazy-load', {
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
       await this.whatsappService.connect();
       this.setupMessageHandlers();
       this.isRunning = true;
@@ -48,6 +60,19 @@ export class MessageProcessingJob {
   }
 
   private async processMessage(message: WhatsAppMessage): Promise<void> {
+    // Defense-in-depth: verify group is monitored before any processing
+    const isGroup = message.from.endsWith('@g.us');
+    if (isGroup) {
+      const monitored = await groupManager.isMonitoredAsync(message.from);
+      if (!monitored) {
+        logger.debug('MessageProcessingJob: skipping non-monitored group', {
+          groupId: message.from,
+          messageId: message.id,
+        });
+        return;
+      }
+    }
+
     // Validate message before processing
     try {
       this.inputGuard.validateMessage(message);

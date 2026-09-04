@@ -1,6 +1,7 @@
 import { healthService, getHealth, getLiveness, getReadiness, getHealthMetrics } from './healthService';
 import { logger } from './logger';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { whatsappService } from './whatsapp';
 
 export interface HealthServerConfig {
   port: number;
@@ -191,6 +192,22 @@ export class HealthServer {
     }
   }
 
+  private async handleGroupsRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    try {
+      if (req.method !== 'GET') {
+        this.createErrorResponse(res, 'Method not allowed', 405);
+        return;
+      }
+      const groups = await whatsappService.getGroups();
+      this.createJsonResponse(res, { count: groups.length, groups });
+    } catch (error) {
+      logger.error('HealthServer', 'Groups request failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.createErrorResponse(res, error instanceof Error ? error.message : 'Failed to fetch groups', 500);
+    }
+  }
+
   private async handleRootRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       if (req.method !== 'GET') {
@@ -268,6 +285,8 @@ export class HealthServer {
         this.handleReadinessRequest(req, res);
       } else if (url === '/metrics') {
         this.handleMetricsRequest(req, res);
+      } else if (url === '/groups' || url === '/api/groups') {
+        this.handleGroupsRequest(req, res);
       } else if (url === '/' || url === '/health') {
         this.handleRootRequest(req, res);
       } else {

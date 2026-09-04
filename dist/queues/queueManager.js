@@ -14,7 +14,7 @@ class QueueManager {
     constructor() {
         const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
         this.redis = new ioredis_1.default(redisUrl, {
-            maxRetriesPerRequest: 3,
+            maxRetriesPerRequest: null,
             retryStrategy: (times) => {
                 const delay = Math.min(times * 500, 3000);
                 return delay;

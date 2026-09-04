@@ -4,11 +4,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MessageProcessingJob = void 0;
-const whatsapp_1 = __importDefault(require("../services/whatsapp"));
+const whatsapp_1 = require("../services/whatsapp");
 const supabase_1 = __importDefault(require("../services/supabase"));
 const messageProcessor_1 = __importDefault(require("../services/messageProcessor"));
 const inputGuard_1 = require("../services/inputGuard");
+const groupManager_1 = require("../services/groupManager");
 const logger_1 = require("../services/logger");
+const logger_2 = require("../utils/logger");
 class MessageProcessingJob {
     whatsappService;
     supabaseService;
@@ -16,7 +18,7 @@ class MessageProcessingJob {
     inputGuard;
     isRunning = false;
     constructor() {
-        this.whatsappService = new whatsapp_1.default();
+        this.whatsappService = whatsapp_1.whatsappService;
         this.supabaseService = new supabase_1.default();
         this.messageProcessor = new messageProcessor_1.default();
         this.inputGuard = (0, inputGuard_1.getInputGuard)();
@@ -25,6 +27,15 @@ class MessageProcessingJob {
         const startTime = Date.now();
         try {
             logger_1.log.info('MessageProcessingJob', 'Starting Message Processing Job');
+            try {
+                await groupManager_1.groupManager.refreshCache();
+                logger_1.log.info('MessageProcessingJob', 'Group cache warmed up');
+            }
+            catch (e) {
+                logger_1.log.warn('MessageProcessingJob', 'Failed to warm up group cache; will lazy-load', {
+                    error: e instanceof Error ? e.message : String(e),
+                });
+            }
             await this.whatsappService.connect();
             this.setupMessageHandlers();
             this.isRunning = true;
@@ -50,6 +61,17 @@ class MessageProcessingJob {
         });
     }
     async processMessage(message) {
+        const isGroup = message.from.endsWith('@g.us');
+        if (isGroup) {
+            const monitored = await groupManager_1.groupManager.isMonitoredAsync(message.from);
+            if (!monitored) {
+                logger_2.logger.debug('MessageProcessingJob: skipping non-monitored group', {
+                    groupId: message.from,
+                    messageId: message.id,
+                });
+                return;
+            }
+        }
         try {
             this.inputGuard.validateMessage(message);
         }

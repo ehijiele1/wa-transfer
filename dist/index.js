@@ -7,11 +7,15 @@ const JobScheduler_1 = require("./jobs/JobScheduler");
 const config_1 = __importDefault(require("./config"));
 const logger_1 = require("./utils/logger");
 const health_1 = require("./api/health");
+const healthServer_1 = require("./services/healthServer");
+const MessageProcessingJob_1 = require("./jobs/MessageProcessingJob");
 class WhatsAppMonitoringApp {
     jobScheduler;
+    messageJob;
     isRunning = false;
     constructor() {
         this.jobScheduler = new JobScheduler_1.JobScheduler();
+        this.messageJob = new MessageProcessingJob_1.MessageProcessingJob();
     }
     async start() {
         try {
@@ -23,6 +27,8 @@ class WhatsAppMonitoringApp {
                 ollama: { baseUrl: config_1.default.ollama.baseUrl }
             });
             await this.jobScheduler.start();
+            await healthServer_1.healthServer.start();
+            this.messageJob.start().catch(e => logger_1.logger.warn('MessageProcessingJob start failed, will retry via health checks', { error: e.message }));
             this.isRunning = true;
             logger_1.logger.info('✅ WhatsApp Monitoring Application started successfully');
         }
@@ -151,7 +157,9 @@ class WhatsAppMonitoringApp {
         try {
             logger_1.logger.info('🛑 Stopping WhatsApp Monitoring Application...');
             this.isRunning = false;
+            await this.messageJob.stop().catch(() => { });
             await this.jobScheduler.stop();
+            await (0, healthServer_1.stopHealthServer)();
             logger_1.logger.info('✅ WhatsApp Monitoring Application stopped successfully');
         }
         catch (error) {

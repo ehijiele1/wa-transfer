@@ -10,12 +10,19 @@ export declare class WhatsAppService {
     constructor();
     connect(): Promise<void>;
     private setupEventHandlers;
+    private handleTriggerMessage;
     private processMessage;
     private getMessageType;
     private extractMessageContent;
     private extractMetadata;
     onMessage(callback: (message: WhatsAppMessage) => void): void;
     disconnect(): Promise<void>;
+    getGroups(): Promise<Array<{
+        name: string;
+        id: string;
+    }>>;
+    isReady(): boolean;
 }
+export declare const whatsappService: WhatsAppService;
 export default WhatsAppService;
 //# sourceMappingURL=whatsapp.d.ts.map
