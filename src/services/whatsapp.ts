@@ -47,6 +47,7 @@ export class WhatsAppService {
             '--crash-dumps-dir=/tmp',
           ],
           headless: true,
+          protocolTimeout: 300000,
         },
       });
 
@@ -55,6 +56,10 @@ export class WhatsAppService {
       logger.info('WhatsApp client connected successfully');
     } catch (error) {
       logger.error('Failed to connect to WhatsApp', error as Error);
+      if (this.client) {
+        try { await this.client.destroy(); } catch {}
+        this.client = null;
+      }
       throw error;
     }
   }
