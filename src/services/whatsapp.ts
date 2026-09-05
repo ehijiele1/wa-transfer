@@ -54,6 +54,22 @@ export class WhatsAppService {
       this.setupEventHandlers();
       await this.client.initialize();
       logger.info('WhatsApp client connected successfully');
+
+      const pairingNumber = (process.env.WHATSAPP_PAIRING_NUMBER || '').replace(/^\+/, '').trim();
+      if (pairingNumber) {
+        try {
+          const code = await (this.client as any).requestPairingCode(pairingNumber);
+          logger.info(`Pairing code generated: ${code} — enter on phone for ${pairingNumber}: WhatsApp > Linked devices > Link with phone number`);
+          try {
+            const fs = await import('fs');
+            await fs.promises.writeFile('/tmp/pairing-code.txt', code);
+            await fs.promises.writeFile('/tmp/qr.txt', code);
+            console.log(`[PAIRING_CODE] ${code}`);
+          } catch {}
+        } catch (e: any) {
+          logger.error('Failed to generate pairing code, falling back to QR', e as Error);
+        }
+      }
     } catch (error) {
       logger.error('Failed to connect to WhatsApp', error as Error);
       if (this.client) {
@@ -68,6 +84,7 @@ export class WhatsAppService {
     if (!this.client) return;
 
     this.client.on('qr', async (qr: string) => {
+      if ((process.env.WHATSAPP_PAIRING_NUMBER || '').trim()) return;
       logger.info('QR Code generated - scan with WhatsApp Web');
       try {
         const fs = await import('fs');
@@ -78,6 +95,16 @@ export class WhatsAppService {
       } catch {
         console.log('[QRDATA] ' + qr);
       }
+    });
+
+    (this.client as any).on('code', async (code: string) => {
+      logger.info(`Pairing code: ${code} — enter on phone: WhatsApp > Linked devices > Link with phone number`);
+      try {
+        const fs = await import('fs');
+        await fs.promises.writeFile('/tmp/pairing-code.txt', code);
+        await fs.promises.writeFile('/tmp/qr.txt', code);
+        console.log(`[PAIRING_CODE] ${code}`);
+      } catch {}
     });
 
     this.client.on('authenticated', () => {
