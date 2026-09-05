@@ -90,6 +90,27 @@
 
 ---
 
+## 🚀 PHASE 0 DEPLOYMENT — LIVE STATUS (2026-09-04)
+
+| Item | Status | Detail |
+|------|--------|--------|
+| Local PC branch `remediation/p0-p1` | ✅ | at `d9f5cc8` (Phase 0 commit) |
+| GitHub push | ✅ | `d9f5cc8` on `origin`. Push uses owner-account token: `gh auth token -u ehijiele1` (the **active** gh account `powerhousemediaegbeda` cannot push this repo; VannieJay → 403) |
+| Oracle VM source sync | ✅ | VM at `d9f5cc8`. VM's duplicate edits stashed (recoverable), untracked `docker/entrypoint.sh` + `scripts/pair-code.js` moved to `.sync-backup-vm-untracked/` — both **verified identical** to tracked versions |
+| Docker image rebuild | ✅ | `--no-cache`. Required `docker image prune -af && docker container prune -f` first (VM disk was 99% full; 5.9 GB reclaimed → 46%) |
+| Container health | ✅ | `wa-transfer` **healthy** (:3001), `wa-transfer-redis` up (:6379); `/health` + `/readiness` all green |
+| Phase 0 artifacts in image | ✅ | `/app/dist/cli/list-monitored-groups.js` and `/app/dist/services/groupManager.js` present (image rootfs is read-only) |
+| Groups CLI | ⏳ | Runs from container; returns 0 groups pending the Supabase table (below) |
+| Supabase `monitored_groups` | ⚠️ **BLOCKER** | `PGRST205` — table missing in project **`eqrjcwuaqhzajvcarqmb`** (the deployed app's project). Re-apply `supabase/migrations/20260903000000_monitored_groups.sql` in that project's SQL Editor. Local `.env` points to `localhost:54321` (demo) — not the deployed project |
+| WhatsApp E2E test | ⏳ | Pending after migration applied: user sends `WATM Good Afternoon` in a group (silent registration), verify via CLI + logs |
+
+**Deployment gotchas (registered for future sessions):**
+1. Long Docker builds over SSH get disconnected ("Connection closed by remote host") — the build process usually **survives**; poll `ps aux | grep docker-compose` and `/tmp/build2.log`.
+2. VM disk fills up across repeated image builds — check `df -h /`, prune Docker images before `--no-cache` rebuild.
+3. Container rootfs is read-only — `docker cp` fails; run helper scripts via `docker exec -i wa-transfer node -` with stdin.
+
+---
+
 ## 🔴 REMAINING CRITICAL ITEMS
 
 ### 1. Wire Remaining Circuit Breakers
@@ -223,10 +244,11 @@ MASTER_DOCUMENTATION.md ← READ THIS FIRST
 - **Web Dashboard:** 📋 Planned (Phase 1 ready to start)
 - **Documentation:** ✅ Master file created
 - **Build Status:** ✅ Passing
+- **Phase 0 Deployment:** 🚀 Live on Oracle VM (2026-09-04); one blocker — `monitored_groups` migration must be (re)applied to Supabase project `eqrjcwuaqhzajvcarqmb`
 
-**Current State:** Backend is production-ready with minor remaining items. Web Dashboard is fully planned and ready to begin implementation.
+**Current State:** Backend is running in production on the Oracle VM. Phase 0 group registration is deployed; final E2E blocked only by the Supabase `monitored_groups` migration placement.
 
 ---
 
 *This file tracks remediation progress. Update it as tasks are completed.*
-*Last updated: 2026-09-03*
+*Last updated: 2026-09-04 (Phase 0 deployment record added)*

@@ -1,6 +1,6 @@
 # MASTER DOCUMENTATION — wa-transfer
 > **This is the SINGLE SOURCE OF TRUTH.** Read this file first. Everything else references from here.
-> **Last Updated:** 2026-09-03 | **Version:** 2.1.0 | **Status:** Phase 0 Complete (Group Registration)
+> **Last Updated:** 2026-09-04 | **Version:** 2.2.0 | **Status:** Phase 0 DEPLOYED to Oracle VM (Group Registration)
 > **Next Phase:** Phase 1 — Multi-Layer Product Filters
 
 ---
@@ -17,7 +17,8 @@
 8. [Implementation Plan](#8-implementation-plan)
 9. [Current Status & Known Issues](#9-current-status--known-issues)
 10. [File Reference Map](#10-file-reference-map)
-11. [Continuity Protocol](#11-continuity-protocol)
+11. [Environment & Infrastructure Map](#11-environment--infrastructure-map)
+12. [Continuity Protocol](#12-continuity-protocol)
 
 ---
 
@@ -628,7 +629,111 @@ User → Login Page → NextAuth.js → Supabase Auth (email/password)
 
 ---
 
-## 11. CONTINUITY PROTOCOL
+## 11. ENVIRONMENT & INFRASTRUCTURE MAP
+
+> **READ THIS FIRST IF YOU ARE A NEW AI MODEL/SESSION.**
+> This section registers WHERE every piece of the system physically lives and HOW to inspect/operate each part, so that a change of AI model does not lose the map.
+> **Never write secrets into this doc** — secrets live in the `.env` files listed below; register their *locations*, not their *values*.
+
+### 11.1 Machines & Access
+
+| Role | Location | Access |
+|------|----------|--------|
+| **Dev PC (this machine)** | Windows 10/11 + PowerShell 5.1, VS Code | Direct |
+| **wa-transfer workspace** | `C:\Users\ehiji\OneDrive\Desktop\WebApps\wa-transfer` | Git repo, branch `remediation/p0-p1` |
+| **VannieJay website** | `C:\Users\ehiji\OneDrive\Desktop\WebApps\New-VannieJay-Website` | Separate Git repo (integration target, Phase 5) |
+| **Oracle VM (production)** | `ubuntu@140.238.79.76` — OCI Always Free, x86_64, 2 CPU / 11 GB RAM | SSH key below |
+| **SSH key (KEEP — never commit, never delete)** | `C:\Users\ehiji\OneDrive\Desktop\WebApps\wa-transfer\ssh-wa-transfer-backup.key` (+ `.pub`) | `ssh -i <path> ubuntu@140.238.79.76` |
+| **Ollama gateway keys** | `C:\Users\ehiji\AppData\Local\Temp\opencode\gateway-keys.txt` | "App1" key = wa-transfer |
+
+### 11.2 Production Runtime (Oracle VM)
+
+- **App dir:** `/home/ubuntu/wa-transfer` (git branch `remediation/p0-p1`)
+- **Runtime:** docker-compose → 2 containers.
+  | Container | Role | Port | Health |
+  |-----------|------|------|--------|
+  | `wa-transfer` | App (Node.js, rootfs READ-ONLY) | `3001` | `http://localhost:3001/health` |
+  | `wa-transfer-redis` | Redis (BullMQ) | `6379` | — |
+- **Ollama:** `127.0.0.1:11434` (models: `qwen2.5:7b`, `nomic-embed-text`). External gateway: `140.238.79.76:8080/app1/` + header `X-API-Key`.
+- **Useful commands (ran on the VM):**
+  ```bash
+  docker-compose logs -f wa-transfer              # app logs
+  docker-compose ps                                # status / health
+  docker-compose restart                           # quick restart
+  docker-compose down && docker-compose build --no-cache && docker-compose up -d   # full rebuild
+  docker exec wa-transfer ls /app/dist/cli/        # verify Phase 0 CLI shipped
+  docker exec wa-transfer node /app/dist/cli/list-monitored-groups.js   # groups CLI
+  ```
+  `src/` TS is pre-built to `/app/dist/` at image build time (Dockerfile does the build; container never compiles).
+- **GOTCHAS (discovered during Phase 0 deploy):**
+  1. Container rootfs is **read-only** — `docker cp` into it fails. Run tiny scripts over stdin: `docker exec -i wa-transfer node - < ./script.js`.
+  2. Long SSH commands during heavy image builds get dropped ("Connection closed by remote host") — the build usually **survives**; poll with `ps aux | grep docker-compose` and watch `/tmp/build2.log`.
+  3. VM disk previously reached **99% full** (56 docker images ≈ 29.5 GB). Before a `--no-cache` rebuild run a prune: `docker image prune -af && docker container prune -f`. Check space: `df -h /`.
+  4. If `git status` on the VM shows unexpected modifications, **inspect before building** — the VM has had manual edits in past sessions.
+
+### 11.3 Database (Supabase)
+
+| Item | Location / Value |
+|------|------------------|
+| **Real project (production)** | `https://eqrjcwuaqhzajvcarqmb.supabase.co` — URL + keys live in the VM's `/home/ubuntu/wa-transfer/.env` (baked into the image at build time) |
+| **Local PC `.env`** | `C:\Users\ehiji\OneDrive\Desktop\WebApps\wa-transfer\.env` — currently points to `http://localhost:54321` (Supabase **demo/local** keys!). **Do not deploy from this file.** This was a root cause of the original "product not working" |
+| **Dashboard** | https://supabase.com/dashboard — apply migrations via SQL Editor of project `eqrjcwuaqhzajvcarqmb` |
+
+**Migration register (applied status):**
+| Migration | Purpose | Status |
+|-----------|---------|--------|
+| `supabase/migrations/20260728000000_service_role_isolation.sql` | Service-role isolation | ✅ applied |
+| `supabase/migrations/20260824000000_rls_and_idempotency.sql` | RLS + idempotency | ✅ applied |
+| `supabase/migrations/20260903000000_monitored_groups.sql` | **Phase 0** — `monitored_groups` + RPCs | ⚠️ must exist in `eqrjcwuaqhzajvcarqmb`; if `PGRST205 / table not found`, re-apply in SQL Editor. To force PostgREST schema reload: `select pg_notify('pgrst','reload schema');` |
+
+The app connects with the **anon key** + RLS (policies `allow anon all monitored_groups`). Service-role key exists as fallback in SupabaseService.
+
+### 11.4 Git State Register (update after every deploy)
+
+| Repo | Branch | HEAD (as of 2026-09-04) | Notes |
+|------|--------|--------------------------|-------|
+| **Local PC** (source of truth) | `remediation/p0-p1` | `d9f5cc8` — Phase 0 | remote `https://github.com/ehijiele1/wa-transfer.git` |
+| **GitHub** | `remediation/p0-p1` | `d9f5cc8` | pushed 2026-09-04 using owner-account token (see 11.5) |
+| **Oracle VM** | `remediation/p0-p1` | `d9f5cc8` | pulled 2026-09-04 after `git stash` + untracked-backup |
+| **VM stash** (recoverable) | — | `stash@{0}` "duplicate-of-318f93d pre-sync" | duplicate edits from a previous VM session; verified identical to commit `318f93d` |
+| **VM backup dir** | — | `.sync-backup-vm-untracked/` (`/home/ubuntu/wa-transfer`) | previous VM-untracked `scripts/pair-code.js` + `docker/entrypoint.sh` moved here during sync; both verified **identical** to tracked versions |
+
+### 11.5 Canonical Deploy / Code-Sync Workflow
+
+1. **Develop** on the local PC.
+2. **Verify:** `npm run typecheck && npm run build && npm test`.
+3. **Commit.**
+4. **Push to GitHub** (requires the OWNER account token, not the active gh account):
+   ```powershell
+   $t = gh auth token -u ehijiele1
+   git push "https://x-access-token:$t@github.com/ehijiele1/wa-transfer.git" remediation/p0-p1
+   ```
+   gh accounts present on this PC: `powerhousemediaegbeda` (**active**), `ehijiele1` (owner), `VannieJay`. The VannieJay credential gets **403** on this repo.
+5. **Pull on the VM:**
+   ```bash
+   ssh -i <ssh-key> ubuntu@140.238.79.76
+   cd /home/ubuntu/wa-transfer && git pull origin remediation/p0-p1
+   ```
+   If an **untracked file would be overwritten**, move it to `.sync-backup-vm-untracked/` (never `rm` blindly — back it up, then diff against the incoming tracked file).
+6. **Rebuild + restart:** `docker-compose down && docker-compose build --no-cache && docker-compose up -d` (prune docker images first if disk tight — see 11.2).
+7. **Verify:** `curl localhost:3001/health` → `healthy`; then the checks in 11.2.
+
+### 11.6 VannieJay Website (Phase 5 integration target)
+
+| Item | Location |
+|------|----------|
+| Workspace | `C:\Users\ehiji\OneDrive\Desktop\WebApps\New-VannieJay-Website` |
+| Stack | Vite + React + TypeScript (`vercel.json` = Vercel deploy). **NOT WordPress** |
+| **Products source of truth** | `src/data/products.json` — single file to edit for all product content |
+| Chatbot | `api/chat.mjs` — Gemini proxy endpoint (Vercel serverless) |
+| Handbook | `HANDBOOK.md` (in that repo) |
+| Deployment | Vercel (vanniejay.com.ng) |
+
+Integration plan: **wa-transfer → website sync via Git-based PR with auto-merge for all changes** (image hosting via cloud storage — Vercel Blob / Supabase Storage).
+
+---
+
+## 12. CONTINUITY PROTOCOL
 
 ### When Switching LLM Models
 
@@ -700,5 +805,5 @@ docker-compose logs -f wa-transfer
 
 *This document is the master reference for the wa-transfer project. All other documentation files are supplementary. When in doubt, start here.*
 
-*Last updated by: opencode/mimo-v2-5-free*
+*Last updated by: opencode/big-pickle — 2026-09-04 (Phase 0 deployed to Oracle VM; Section 11 Environment Map added)*
 *Next update scheduled: After Phase 1 completion (Web Dashboard foundation)*

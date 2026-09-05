@@ -158,17 +158,27 @@ A Next.js web application for managing wa-transfer remotely from phone/browser.
 
 ---
 
-## ENVIRONMENT DETAILS
+## WHERE EVERYTHING IS (fast map)
 
-| Item | Value |
-|------|-------|
-| OS | Windows 10 |
-| Node.js | 20+ required |
-| Python | 3.10+ (for CrewAI) |
-| Redis | Required for BullMQ |
-| Supabase | PostgreSQL (credentials in .env) |
-| Ollama | Optional (for AI features) |
-| Working Dir | `c:/Users/ehiji/OneDrive/Desktop/WebApps/wa-transfer` |
+> **FULL MAP:** `MASTER_DOCUMENTATION.md` → **Section 11 (Environment & Infrastructure Map)**. This is the authoritative location register for ANY new AI model/session.
+
+| Item | Location |
+|------|----------|
+| Dev PC | Windows + PowerShell 5.1, `C:\Users\ehiji\OneDrive\Desktop\WebApps\wa-transfer` (branch `remediation/p0-p1`) |
+| VannieJay website (Phase 5 target) | `C:\Users\ehiji\OneDrive\Desktop\WebApps\New-VannieJay-Website` (`src/data/products.json` = product source of truth) |
+| Oracle VM (production) | `ubuntu@140.238.79.76`, app dir `/home/ubuntu/wa-transfer`, docker-compose (`wa-transfer` :3001, `wa-transfer-redis` :6379), Ollama `:11434` + gateway `:8080/app1/` |
+| SSH key (KEEP, never commit) | `C:\Users\ehiji\OneDrive\Desktop\WebApps\wa-transfer\ssh-wa-transfer-backup.key` |
+| Supabase production project | `eqrjcwuaqhzajvcarqmb.supabase.co` (keys in VM `.env`; local `.env` = localhost demo — do NOT deploy from it) |
+| Ollama gateway keys | `C:\Users\ehiji\AppData\Local\Temp\opencode\gateway-keys.txt` |
+| GitHub push token path | `gh auth token -u ehijiele1` (owner account; the *active* gh account is `powerhousemediaegbeda` and cannot push this repo) |
+| Git state | Local `d9f5cc8` · GitHub `d9f5cc8` · VM `d9f5cc8` (2026-09-04) |
+
+### Deployment / Rebuild (canonical)
+1. Local: `npm run typecheck && npm run build && npm test` → `git commit`
+2. Push: `$t = gh auth token -u ehijiele1; git push "https://x-access-token:$t@github.com/ehijiele1/wa-transfer.git" remediation/p0-p1`
+3. VM: `cd /home/ubuntu/wa-transfer && git pull origin remediation/p0-p1` (if untracked-file conflict, move the file to `.sync-backup-vm-untracked/` first)
+4. VM: `docker-compose down && docker-compose build --no-cache && docker-compose up -d` (prune docker images first if disk >90%: `docker image prune -af && docker container prune -f`)
+5. Verify: `curl localhost:3001/health` + `docker exec wa-transfer ls /app/dist/cli/`
 
 ---
 
@@ -225,4 +235,4 @@ docker run -d --name redis -p 6379:6379 redis:7-alpine
 ---
 
 *This file ensures continuity across LLM sessions. Always update it when making changes.*
-*Last updated: 2026-09-03*
+*Last updated: 2026-09-04 (added "Where Everything Is" map → MASTER_DOCUMENTATION.md §11)*
