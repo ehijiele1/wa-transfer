@@ -62,8 +62,17 @@ export class WhatsAppService {
   private setupEventHandlers(): void {
     if (!this.client) return;
 
-    this.client.on('qr', (qr: string) => {
+    this.client.on('qr', async (qr: string) => {
       logger.info('QR Code generated - scan with WhatsApp Web');
+      try {
+        const fs = await import('fs');
+        await fs.promises.writeFile('/tmp/qr.txt', qr);
+        const qrcode = require('qrcode') as any;
+        await qrcode.toFile('/tmp/qr.png', qr, { width: 340, margin: 2 });
+        console.log('[QR] saved to /tmp/qr.png and /tmp/qr.txt — scan now (refreshes ~every 20s)');
+      } catch {
+        console.log('[QRDATA] ' + qr);
+      }
     });
 
     this.client.on('authenticated', () => {

@@ -44,7 +44,7 @@ COPY package*.json ./
 # Skip lifecycle scripts: no src/ yet so prepare-build would fail;
 # Chromium is downloaded explicitly instead of via postinstall.
 RUN npm ci --ignore-scripts \
-    && npx puppeteer browsers install chrome
+    && npx puppeteer browsers install chrome@146.0.7680.31
 
 # Stage: Build application
 FROM base AS build
