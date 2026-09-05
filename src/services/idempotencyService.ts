@@ -157,43 +157,54 @@ export class IdempotencyService {
 
     this.cache.set(idempotencyKey, idempotencyEntry);
 
-    try {
-      // Execute the operation
-      const result = await operationFn();
-      
-      // Update cache with successful result
-      const updatedEntry: IdempotencyKey = {
-        ...idempotencyEntry,
-        status: 'completed',
-        result,
-        retryCount: idempotencyEntry.retryCount + 1,
-        lastAttemptAt: new Date(),
-      };
-      
-      this.cache.set(idempotencyKey, updatedEntry);
-      
-      return {
-        success: true,
-        data: result,
-        idempotencyKey,
-      };
-    } catch (error) {
-      // Update cache with failure
-      const updatedEntry: IdempotencyKey = {
-        ...idempotencyEntry,
-        status: 'failed',
-        retryCount: idempotencyEntry.retryCount + 1,
-        lastAttemptAt: new Date(),
-      };
-      
-      this.cache.set(idempotencyKey, updatedEntry);
-      
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-        idempotencyKey,
-      };
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
+      try {
+        // Execute the operation
+        const result = await operationFn();
+
+        // Update cache with successful result
+        const updatedEntry: IdempotencyKey = {
+          ...idempotencyEntry,
+          status: 'completed',
+          result,
+          retryCount: attempt,
+          lastAttemptAt: new Date(),
+        };
+
+        this.cache.set(idempotencyKey, updatedEntry);
+
+        return {
+          success: true,
+          data: result,
+          idempotencyKey,
+          cached: false,
+        };
+      } catch (error) {
+        lastError = error;
+
+        // Update cache with failure
+        const updatedEntry: IdempotencyKey = {
+          ...idempotencyEntry,
+          status: 'failed',
+          retryCount: attempt,
+          lastAttemptAt: new Date(),
+        };
+
+        this.cache.set(idempotencyKey, updatedEntry);
+
+        if (attempt < this.config.maxRetries) {
+          // Brief backoff between attempts
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+      }
     }
+
+    return {
+      success: false,
+      error: lastError instanceof Error ? lastError.message : String(lastError),
+      idempotencyKey,
+    };
   }
 
   async checkDeduplication(

@@ -138,6 +138,12 @@
 **What:** Two logger implementations exist. Choose one and remove the other.
 **Effort:** 2 hours
 
+### 6. Repair Stale Test Suites (found 2026-09-04)
+**Files:** `test/services/inputGuard.test.ts`, `test/services/urlGuard.test.ts`, `test/integration/health.test.ts`, `test/integration/jobs.test.ts`
+**What:** Written against REMOVED APIs; compile-fail under `ts-jest` (`InputGuard.validateProperty/getStats`, `URLGuard.validateRequest/sanitizeURL`, `JobScheduler.registerJob/executeJob`, `HealthService.checkDatabase`, `OperationalMonitor.getCurrentMetrics` — none exist anymore). Rewrite against current service APIs.
+**Already fixed this session:** corrected `test/` relative imports (`../src/` → `../../src/` in 5 suites) + `idempotencyService.ts` now retries to `maxRetries` internally and returns `cached:false` on fresh success. Result: **38 tests pass** (idempotency, groupManager, circuitBreaker, logger, fetchWithTimeout).
+**Effort:** 2-4 hours (test rewrites only).
+
 ---
 
 ## 📋 WEB DASHBOARD — NEW INITIATIVE

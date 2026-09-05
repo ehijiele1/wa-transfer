@@ -1,8 +1,8 @@
-import { HealthService } from '../src/services/healthService';
-import { OperationalMonitor } from '../src/services/operationalMonitor';
+import { HealthService } from '../../src/services/healthService';
+import { OperationalMonitor } from '../../src/services/operationalMonitor';
 
 // Mock dependencies
-jest.mock('../src/services/logger', () => ({
+jest.mock('../../src/services/logger', () => ({
   logger: {
     info: jest.fn(),
     warn: jest.fn(),
@@ -11,7 +11,7 @@ jest.mock('../src/services/logger', () => ({
   }
 }));
 
-jest.mock('../src/services/supabaseClients', () => ({
+jest.mock('../../src/services/supabaseClients', () => ({
   getSupabaseAnonClient: jest.fn(() => ({
     from: jest.fn(() => ({
       select: jest.fn().mockReturnThis(),

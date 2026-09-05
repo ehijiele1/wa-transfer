@@ -1,15 +1,15 @@
-import { JobScheduler } from '../src/jobs/JobScheduler';
-import { MessageProcessingJob } from '../src/jobs/MessageProcessingJob';
-import { ContentGenerationJob } from '../src/jobs/ContentGenerationJob';
-import { SocialMediaPublishingJob } from '../src/jobs/SocialMediaPublishingJob';
+import { JobScheduler } from '../../src/jobs/JobScheduler';
+import { MessageProcessingJob } from '../../src/jobs/MessageProcessingJob';
+import { ContentGenerationJob } from '../../src/jobs/ContentGenerationJob';
+import { SocialMediaPublishingJob } from '../../src/jobs/SocialMediaPublishingJob';
 
 // Mock dependencies
-jest.mock('../src/services/supabaseClients', () => ({
+jest.mock('../../src/services/supabaseClients', () => ({
   getSupabaseAnonClient: jest.fn(),
   getSupabaseServiceRoleClient: jest.fn()
 }));
 
-jest.mock('../src/services/logger', () => ({
+jest.mock('../../src/services/logger', () => ({
   logger: {
     info: jest.fn(),
     warn: jest.fn(),
@@ -18,7 +18,7 @@ jest.mock('../src/services/logger', () => ({
   }
 }));
 
-jest.mock('../src/services/idempotencyService', () => ({
+jest.mock('../../src/services/idempotencyService', () => ({
   idempotencyService: {
     executeWithIdempotency: jest.fn(),
     checkDeduplication: jest.fn(),

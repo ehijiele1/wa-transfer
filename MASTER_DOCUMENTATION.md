@@ -562,6 +562,8 @@ User → Login Page → NextAuth.js → Supabase Auth (email/password)
 | `bulkPublish` with 'all' only publishes to Facebook | HIGH | `socialMediaManager.ts` | Should publish to all platforms |
 | WhatsApp health check hardcoded | LOW | `healthService.ts` | Always returns `true` |
 | Twitter error says "Facebook API error" | LOW | `platformAdapters.ts` | Copy-paste bug |
+| **Stale test suites** | MEDIUM | `test/services/inputGuard.test.ts`, `test/services/urlGuard.test.ts`, `test/integration/health.test.ts`, `test/integration/jobs.test.ts` | Written against REMOVED APIs (`InputGuard.validateProperty/getStats`, `URLGuard.validateRequest/sanitizeURL`, `JobScheduler.registerJob/executeJob`, `HealthService.getHealth/checkDatabase`, `OperationalMonitor.getCurrentMetrics`, …). They fail `ts-jest` compile. Need a rewrite aligned to current service APIs (current `InputGuard` has only `validateMessage` + `quarantine`; `UrlGuard` has only `validateUrl` + `sanitizeUrlForLogging`; scheduler APIs moved to `src/jobs/JobScheduler.ts` as `start`/`stop`) |
+| `npm test` runs legacy script | LOW | `test-system.js` | `package.json` `test` script runs `test-system.js` (a stale verification script) instead of jest; use `npm run test:unit` |
 
 ### ✅ Resolved in Phase 0 (2026-09-03)
 - ✅ **WhatsApp group monitoring** — Now works via "WATM Good Afternoon" trigger, registered in Supabase `monitored_groups` table, filtered by `GroupManager.isMonitoredAsync()`
@@ -573,7 +575,7 @@ User → Login Page → NextAuth.js → Supabase Auth (email/password)
 - ⚠️ Reliability: Some stubs remain (analytics, A/B testing)
 - ⚠️ Observability: Structured logging exists but not fully wired
 - ❌ No web dashboard for remote management
-- ❌ No automated test suite
+- ⚠️ Test suite: 38 unit tests pass (idempotency, groupManager, circuitBreaker, logger, fetchWithTimeout); 4 stale suites need API-aligned rewrites (see §9 Known Issues)
 - ❌ No CI/CD pipeline
 
 ---

@@ -1,4 +1,4 @@
-import { InputGuard } from '../src/services/inputGuard';
+import { InputGuard } from '../../src/services/inputGuard';
 
 describe('InputGuard', () => {
   let inputGuard: InputGuard;

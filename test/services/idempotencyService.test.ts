@@ -1,4 +1,4 @@
-import { IdempotencyService, executeWithIdempotency, checkDeduplication, markAsProcessed } from '../src/services/idempotencyService';
+import { IdempotencyService, executeWithIdempotency, checkDeduplication, markAsProcessed } from '../../src/services/idempotencyService';
 
 describe('IdempotencyService', () => {
   let idempotencyService: IdempotencyService;

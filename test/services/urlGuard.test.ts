@@ -1,4 +1,4 @@
-import { URLGuard } from '../src/services/urlGuard';
+import { URLGuard } from '../../src/services/urlGuard';
 
 describe('URLGuard', () => {
   let urlGuard: URLGuard;
