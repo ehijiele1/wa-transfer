@@ -301,25 +301,36 @@ Return only the caption with hashtags, no explanations.`,
 
   private async waitForMediaProcessing(mediaId: string, maxAttempts: number = 10): Promise<void> {
     let attempts = 0;
-    
+
     while (attempts < maxAttempts) {
       try {
         const status = await this.mediaService.getMediaStatus(mediaId);
-        
-        if (status.status === 'ready') {
+
+        // Graph API container status: FINISHED | IN_PROGRESS | PUBLISHED | ERROR | EXPIRED
+        const statusCode: string | undefined =
+          status?.status_code ?? (status?.status === 'ready' ? 'FINISHED' : undefined);
+
+        if (statusCode === 'FINISHED' || statusCode === 'PUBLISHED') {
           console.log(`Media ${mediaId} is ready`);
           return;
         }
-        
+
+        if (statusCode === 'ERROR' || statusCode === 'EXPIRED') {
+          throw new Error(`Media ${mediaId} processing failed: ${statusCode}`);
+        }
+
         console.log(`Waiting for media ${mediaId} to be processed... (attempt ${attempts + 1}/${maxAttempts})`);
         await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
         attempts++;
       } catch (error) {
+        if (error instanceof Error && error.message.includes('processing failed:')) {
+          throw error; // Terminal container state - do not retry
+        }
         console.error(`Error checking media status for ${mediaId}:`, error);
         attempts++;
       }
     }
-    
+
     throw new Error(`Media ${mediaId} processing timed out after ${maxAttempts} attempts`);
   }
 

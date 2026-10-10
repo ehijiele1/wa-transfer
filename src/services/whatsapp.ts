@@ -13,6 +13,10 @@ export class WhatsAppService {
   private retryDelayMs = 5000;
   private readyTime = 0;
   private tableMissingLogged = false;
+  private authenticated = false;
+  private pairingTimer: NodeJS.Timeout | null = null;
+  private lastCodeAt = 0;
+  private pairingNumber = '';
 
   constructor() {}
 
@@ -36,6 +40,11 @@ export class WhatsAppService {
           clientId: 'wa-transfer',
           dataPath: './wwebjs-auth',
         }),
+        // WhatsApp Web rejects the library's stale default UA (Chrome/101);
+        // send a modern UA so the page bootstraps instead of showing
+        // "update Chrome".
+        userAgent:
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         puppeteer: {
           args: [
             '--no-sandbox',
@@ -56,19 +65,45 @@ export class WhatsAppService {
       logger.info('WhatsApp client connected successfully');
 
       const pairingNumber = (process.env.WHATSAPP_PAIRING_NUMBER || '').replace(/^\+/, '').trim();
+      this.pairingNumber = pairingNumber;
       if (pairingNumber) {
-        try {
-          const code = await (this.client as any).requestPairingCode(pairingNumber);
-          logger.info(`Pairing code generated: ${code} — enter on phone for ${pairingNumber}: WhatsApp > Linked devices > Link with phone number`);
-          try {
-            const fs = await import('fs');
-            await fs.promises.writeFile('/tmp/pairing-code.txt', code);
-            await fs.promises.writeFile('/tmp/qr.txt', code);
-            console.log(`[PAIRING_CODE] ${code}`);
-          } catch {}
-        } catch (e: any) {
-          logger.error('Failed to generate pairing code, falling back to QR', e as Error);
-        }
+        // Pairing codes are requested in the background: the first call can
+        // race page load, and WhatsApp rate-limits code issuance, so keep
+        // retrying (gently) until the phone links. The 'authenticated'
+        // handler stops the loop. The first success also starts the in-page
+        // 3-minute rotation that keeps feeding the 'code' handler.
+        const requestCode = async (): Promise<boolean> => {
+          const code = await this.fetchAndStorePairingCode();
+          return code !== null;
+        };
+        const stopPairingLoop = () => {
+          if (this.pairingTimer) {
+            clearInterval(this.pairingTimer);
+            this.pairingTimer = null;
+          }
+        };
+        // Persistent staleness-driven loop: the in-page 3-minute rotation
+        // can die (e.g. socket leaves UNPAIRED after an expired-code attempt
+        // on the phone), so re-request whenever no code has been seen for
+        // >6 minutes and the phone hasn't linked yet. Stops on authenticated.
+        const ensureLoop = () => {
+          if (this.pairingTimer || this.authenticated) return;
+          this.pairingTimer = setInterval(() => {
+            if (this.authenticated) {
+              stopPairingLoop();
+              return;
+            }
+            if (Date.now() - this.lastCodeAt > 6 * 60 * 1000) {
+              void requestCode();
+            }
+          }, 5 * 60 * 1000);
+        };
+        // Stagger the first attempt so the WA Web app can finish loading.
+        setTimeout(() => {
+          void requestCode().then(() => {
+            ensureLoop();
+          });
+        }, 20000);
       }
     } catch (error) {
       logger.error('Failed to connect to WhatsApp', error as Error);
@@ -98,6 +133,7 @@ export class WhatsAppService {
     });
 
     (this.client as any).on('code', async (code: string) => {
+      this.lastCodeAt = Date.now();
       logger.info(`Pairing code: ${code} — enter on phone: WhatsApp > Linked devices > Link with phone number`);
       try {
         const fs = await import('fs');
@@ -108,6 +144,11 @@ export class WhatsAppService {
     });
 
     this.client.on('authenticated', () => {
+      this.authenticated = true;
+      if (this.pairingTimer) {
+        clearInterval(this.pairingTimer);
+        this.pairingTimer = null;
+      }
       logger.info('WhatsApp authenticated');
     });
 
@@ -129,6 +170,11 @@ export class WhatsAppService {
 
     this.client.on('ready', async () => {
       this.readyTime = Date.now();
+      this.authenticated = true;
+      if (this.pairingTimer) {
+        clearInterval(this.pairingTimer);
+        this.pairingTimer = null;
+      }
       this.reconnectAttempts = 0;
       logger.info('WhatsApp connection established');
 
@@ -300,6 +346,11 @@ export class WhatsAppService {
   }
 
   async disconnect(): Promise<void> {
+    if (this.pairingTimer) {
+      clearInterval(this.pairingTimer);
+      this.pairingTimer = null;
+    }
+    this.authenticated = false;
     if (this.client) {
       this.client.removeAllListeners();
       await this.client.destroy();
@@ -320,6 +371,55 @@ export class WhatsAppService {
 
   isReady(): boolean {
     return !!(this.client && (this.client as any).info);
+  }
+
+  isAuthenticated(): boolean {
+    return this.authenticated;
+  }
+
+  getPairingStatus(): {
+    authenticated: boolean;
+    ready: boolean;
+    pairingNumberSet: boolean;
+    lastCodeAt: number;
+    lastCodeAgeSec: number | null;
+  } {
+    return {
+      authenticated: this.authenticated,
+      ready: this.isReady(),
+      pairingNumberSet: this.pairingNumber.length > 0,
+      lastCodeAt: this.lastCodeAt,
+      lastCodeAgeSec: this.lastCodeAt > 0 ? Math.round((Date.now() - this.lastCodeAt) / 1000) : null,
+    };
+  }
+
+  private async fetchAndStorePairingCode(): Promise<string | null> {
+    if (this.authenticated || !this.client || !this.pairingNumber) return null;
+    try {
+      const code = (await (this.client as any).requestPairingCode(this.pairingNumber)) as string;
+      this.lastCodeAt = Date.now();
+      logger.info(`Pairing code generated: ${code} — enter on phone for ${this.pairingNumber}: WhatsApp > Linked devices > Link with phone number`);
+      try {
+        const fs = await import('fs');
+        await fs.promises.writeFile('/tmp/pairing-code.txt', code);
+        await fs.promises.writeFile('/tmp/qr.txt', code);
+        console.log(`[PAIRING_CODE] ${code}`);
+      } catch {}
+      return code;
+    } catch (e: any) {
+      logger.warn('Pairing code request failed, will retry in background', { error: e?.message ?? String(e) });
+      return null;
+    }
+  }
+
+  // On-demand pairing code (e.g. GET /api/pairing/refresh). Returns a fresh
+  // code, or null when already linked / unavailable.
+  async requestPairingCodeNow(): Promise<{ code: string | null; authenticated: boolean; ready: boolean }> {
+    if (this.authenticated || this.isReady()) {
+      return { code: null, authenticated: true, ready: this.isReady() };
+    }
+    const code = await this.fetchAndStorePairingCode();
+    return { code, authenticated: this.authenticated, ready: this.isReady() };
   }
 }
 

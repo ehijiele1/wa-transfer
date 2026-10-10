@@ -208,6 +208,62 @@ export class HealthServer {
     }
   }
 
+  private async handlePairingRefreshRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    try {
+      if (req.method !== 'GET') {
+        this.createErrorResponse(res, 'Method not allowed', 405);
+        return;
+      }
+      const result = await whatsappService.requestPairingCodeNow();
+      this.createJsonResponse(res, {
+        ...result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.error('HealthServer', 'Pairing refresh request failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.createErrorResponse(res, error instanceof Error ? error.message : 'Failed to refresh pairing code', 500);
+    }
+  }
+
+  private async handlePairingStatusRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    try {
+      if (req.method !== 'GET') {
+        this.createErrorResponse(res, 'Method not allowed', 405);
+        return;
+      }
+      const status = whatsappService.getPairingStatus();
+      this.createJsonResponse(res, {
+        ...status,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.error('HealthServer', 'Pairing status request failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.createErrorResponse(res, error instanceof Error ? error.message : 'Failed to get pairing status', 500);
+    }
+  }
+
+  private async handleQrPngRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    try {
+      if (req.method !== 'GET') {
+        this.createErrorResponse(res, 'Method not allowed', 405);
+        return;
+      }
+      const fs = await import('fs');
+      const data = await fs.promises.readFile('/tmp/qr.png');
+      res.writeHead(200, {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      });
+      res.end(data);
+    } catch (error) {
+      this.createErrorResponse(res, 'QR not available yet — try again in 20 seconds', 404);
+    }
+  }
+
   private async handleRootRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       if (req.method !== 'GET') {
@@ -237,6 +293,9 @@ export class HealthServer {
           liveness: '/liveness',
           readiness: '/readiness',
           metrics: '/metrics',
+          pairingRefresh: '/api/pairing/refresh',
+          pairingStatus: '/api/pairing/status',
+          qrPng: '/api/qr.png',
         },
         ...(typeof healthData === 'object' && 'overall' in healthData ? {
           overall: healthData.overall,
@@ -287,6 +346,12 @@ export class HealthServer {
         this.handleMetricsRequest(req, res);
       } else if (url === '/groups' || url === '/api/groups') {
         this.handleGroupsRequest(req, res);
+      } else if (url === '/api/pairing/refresh') {
+        this.handlePairingRefreshRequest(req, res);
+      } else if (url === '/api/pairing/status') {
+        this.handlePairingStatusRequest(req, res);
+      } else if (url === '/api/qr.png') {
+        this.handleQrPngRequest(req, res);
       } else if (url === '/' || url === '/health') {
         this.handleRootRequest(req, res);
       } else {

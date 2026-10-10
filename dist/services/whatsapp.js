@@ -81,22 +81,69 @@ class WhatsAppService {
                         '--crash-dumps-dir=/tmp',
                     ],
                     headless: true,
+                    protocolTimeout: 300000,
                 },
             });
             this.setupEventHandlers();
             await this.client.initialize();
             logger_1.logger.info('WhatsApp client connected successfully');
+            const pairingNumber = (process.env.WHATSAPP_PAIRING_NUMBER || '').replace(/^\+/, '').trim();
+            if (pairingNumber) {
+                try {
+                    const code = await this.client.requestPairingCode(pairingNumber);
+                    logger_1.logger.info(`Pairing code generated: ${code} — enter on phone for ${pairingNumber}: WhatsApp > Linked devices > Link with phone number`);
+                    try {
+                        const fs = await Promise.resolve().then(() => __importStar(require('fs')));
+                        await fs.promises.writeFile('/tmp/pairing-code.txt', code);
+                        await fs.promises.writeFile('/tmp/qr.txt', code);
+                        console.log(`[PAIRING_CODE] ${code}`);
+                    }
+                    catch { }
+                }
+                catch (e) {
+                    logger_1.logger.error('Failed to generate pairing code, falling back to QR', e);
+                }
+            }
         }
         catch (error) {
             logger_1.logger.error('Failed to connect to WhatsApp', error);
+            if (this.client) {
+                try {
+                    await this.client.destroy();
+                }
+                catch { }
+                this.client = null;
+            }
             throw error;
         }
     }
     setupEventHandlers() {
         if (!this.client)
             return;
-        this.client.on('qr', (qr) => {
+        this.client.on('qr', async (qr) => {
+            if ((process.env.WHATSAPP_PAIRING_NUMBER || '').trim())
+                return;
             logger_1.logger.info('QR Code generated - scan with WhatsApp Web');
+            try {
+                const fs = await Promise.resolve().then(() => __importStar(require('fs')));
+                await fs.promises.writeFile('/tmp/qr.txt', qr);
+                const qrcode = require('qrcode');
+                await qrcode.toFile('/tmp/qr.png', qr, { width: 340, margin: 2 });
+                console.log('[QR] saved to /tmp/qr.png and /tmp/qr.txt — scan now (refreshes ~every 20s)');
+            }
+            catch {
+                console.log('[QRDATA] ' + qr);
+            }
+        });
+        this.client.on('code', async (code) => {
+            logger_1.logger.info(`Pairing code: ${code} — enter on phone: WhatsApp > Linked devices > Link with phone number`);
+            try {
+                const fs = await Promise.resolve().then(() => __importStar(require('fs')));
+                await fs.promises.writeFile('/tmp/pairing-code.txt', code);
+                await fs.promises.writeFile('/tmp/qr.txt', code);
+                console.log(`[PAIRING_CODE] ${code}`);
+            }
+            catch { }
         });
         this.client.on('authenticated', () => {
             logger_1.logger.info('WhatsApp authenticated');

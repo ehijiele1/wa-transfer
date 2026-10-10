@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-10-10T05:05:50.192Z",
+  "summary": {
+    "unit": false,
+    "smoke": false
+  },
+  "totalTests": 0,
+  "failedTests": 2,
+  "passed": 0,
+  "failed": 2
+}

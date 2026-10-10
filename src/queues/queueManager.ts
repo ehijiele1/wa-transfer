@@ -74,6 +74,7 @@ export class QueueManager {
     const queue = this.createQueue(queueName);
 
     const jobOptions: JobsOptions = {
+      jobId: jobData.id,
       priority: jobData.priority === 'high' ? 1 : jobData.priority === 'medium' ? 5 : 10,
       attempts: jobData.maxAttempts,
       backoff: {

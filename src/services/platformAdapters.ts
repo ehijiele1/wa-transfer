@@ -22,7 +22,7 @@ export abstract class BasePlatformAdapter implements PlatformAdapter {
     const errors: string[] = [];
 
     // Check content length
-    if (content.content.length > this.config.maxTextLength) {
+    if (this.formatContent(content).length > this.config.maxTextLength) {
       errors.push(`Content exceeds maximum length of ${this.config.maxTextLength} characters`);
     }
 
@@ -98,14 +98,10 @@ export class FacebookAdapter extends BasePlatformAdapter {
       const formattedContent = this.formatContent(content);
 
       // Upload media if present
-      let mediaAttachments: string[] = [];
+      const mediaAttachments: string[] = [];
       for (const mediaUrl of content.mediaUrls) {
-        try {
-          const mediaId = await this.uploadMedia(mediaUrl, `facebook_${Date.now()}.jpg`);
-          mediaAttachments.push(mediaId);
-        } catch (error) {
-          logger.warn(`Failed to upload media ${mediaUrl}`, { error, platform: this.platform });
-        }
+        const mediaId = await this.uploadMedia(mediaUrl, `facebook_${Date.now()}.jpg`);
+        mediaAttachments.push(mediaId);
       }
 
       // Create post
@@ -265,12 +261,14 @@ export class FacebookAdapter extends BasePlatformAdapter {
 
   protected override async uploadMedia(mediaUrl: string, filename: string): Promise<string> {
     try {
-      const response = await fetch(mediaUrl);
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+      const response = await fetchWithTimeout(mediaUrl, {}, 30000);
+      if (!response.ok) {
+        throw new Error(`Failed to download media: ${response.status}`);
+      }
+      const blob = await response.blob();
 
       const formData = new FormData();
-      formData.append('source', buffer, filename);
+      formData.append('source', blob, filename);
       formData.append('published', 'false');
 
       const uploadResponse = await fetch(

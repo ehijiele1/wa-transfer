@@ -17,18 +17,8 @@ export class InstagramMediaService {
       const safeUrlForLogging = urlGuard.sanitizeUrlForLogging(imageUrl);
       logger.info(`Downloading image from: ${safeUrlForLogging}`);
       
-      // Download the image
-      const imageResponse = await fetchWithTimeout(imageUrl, {}, 30000);
-      if (!imageResponse.ok) {
-        throw new Error(`Failed to download image: ${imageResponse.statusText}`);
-      }
-
-      const imageBuffer = await imageResponse.arrayBuffer();
-      
-      logger.info(`Uploading image to Instagram: ${filename}`);
-      
-      // Upload to Instagram media container
-      const uploadResponse = await retry(() => this.uploadMediaContainer(imageBuffer, filename, altText), 3);
+      // Instagram fetches hosted media itself; /media does not accept file bytes.
+      const uploadResponse = await this.uploadMediaContainer(imageUrl, altText);
       
       logger.info(`Image uploaded successfully: ${uploadResponse.id}`);
       return uploadResponse;
@@ -38,12 +28,10 @@ export class InstagramMediaService {
     }
   }
 
-  private async uploadMediaContainer(imageBuffer: ArrayBuffer, filename: string, altText?: string): Promise<InstagramMediaUploadResponse> {
+  private async uploadMediaContainer(imageUrl: string, altText?: string): Promise<InstagramMediaUploadResponse> {
     const formData = new FormData();
-    const blob = new Blob([imageBuffer]);
-    
-    formData.append('file', blob, filename);
-    formData.append('published', 'false');
+    formData.append('image_url', imageUrl);
+    formData.append('is_carousel_item', 'true');
     
     if (altText) {
       formData.append('alt_text', altText);
@@ -161,7 +149,7 @@ export class InstagramMediaService {
     try {
       const response = await instagramCircuitBreaker.execute(async () => {
         return await fetchWithTimeout(
-          `https://graph.facebook.com/${this.config.graphApiVersion}/${mediaId}`,
+          `https://graph.facebook.com/${this.config.graphApiVersion}/${mediaId}?fields=status_code`,
           {
             method: 'GET',
             headers: {
