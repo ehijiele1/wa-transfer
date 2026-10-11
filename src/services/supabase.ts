@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import config from '../config';
 import { PropertyListing, Promotion, WhatsAppMessage } from '../types';
 import { logger } from '../utils/logger';
+import { WebsiteHandoffService } from './websiteHandoff';
 
 /**
  * Supabase Service with least-privilege access pattern
@@ -179,6 +180,19 @@ class SupabaseService {
         throw serviceError;
       }
     }
+  }
+
+  /**
+   * Hand an extracted property listing off to the VannieJay website content
+   * pipeline as a `content_items` draft (status 'pending', pillar 'whatsapp-ingest').
+   * See vj-hub/contracts/property-data.md and content-lifecycle.md.
+   * Uses the service-role client (server-side only) and never throws.
+   * No-op (logged warning) until wa-transfer's Supabase env points at the
+   * website's shared project.
+   */
+  async handoffPropertyToWebsite(property: PropertyListing): Promise<boolean> {
+    const handoffService = new WebsiteHandoffService(this.getServiceClient());
+    return handoffService.handoff(property);
   }
 
   async getUnprocessedProperties(): Promise<PropertyListing[]> {

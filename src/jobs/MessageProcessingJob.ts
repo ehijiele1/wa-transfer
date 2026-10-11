@@ -89,6 +89,9 @@ export class MessageProcessingJob {
     if (classification.type === 'property' && classification.extractedData) {
       console.log(`🏠 Property detected: ${classification.extractedData.title}`);
       await this.supabaseService.savePropertyListing(classification.extractedData);
+      // Hand off to the website content pipeline (vj-hub contract).
+      // Non-fatal by design: extraction is already saved locally.
+      await this.supabaseService.handoffPropertyToWebsite(classification.extractedData);
     } else if (classification.type === 'promotion' && classification.extractedData) {
       console.log(`🎯 Promotion detected: ${classification.extractedData.title}`);
       await this.supabaseService.savePromotion(classification.extractedData);
