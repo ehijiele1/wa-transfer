@@ -11,6 +11,7 @@ declare class SupabaseService {
     saveMessage(message: WhatsAppMessage): Promise<void>;
     getRecentMessages(limit?: number): Promise<WhatsAppMessage[]>;
     savePropertyListing(property: PropertyListing): Promise<void>;
+    handoffPropertyToWebsite(property: PropertyListing): Promise<boolean>;
     getUnprocessedProperties(): Promise<PropertyListing[]>;
     updatePropertyAsProcessed(propertyId: string): Promise<void>;
     markPropertyAsInstagramPublished(propertyId: string, publishedAt: string): Promise<void>;

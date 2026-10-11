@@ -12,6 +12,8 @@ export interface Config {
     ollama: {
         baseUrl: string;
         model: string;
+        provider: 'ollama' | 'openai-compatible';
+        apiKey: string;
     };
     instagram: {
         accessToken: string;

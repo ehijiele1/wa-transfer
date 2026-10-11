@@ -7,6 +7,10 @@ export declare class WhatsAppService {
     private retryDelayMs;
     private readyTime;
     private tableMissingLogged;
+    private authenticated;
+    private pairingTimer;
+    private lastCodeAt;
+    private pairingNumber;
     constructor();
     connect(): Promise<void>;
     private setupEventHandlers;
@@ -22,6 +26,20 @@ export declare class WhatsAppService {
         id: string;
     }>>;
     isReady(): boolean;
+    isAuthenticated(): boolean;
+    getPairingStatus(): {
+        authenticated: boolean;
+        ready: boolean;
+        pairingNumberSet: boolean;
+        lastCodeAt: number;
+        lastCodeAgeSec: number | null;
+    };
+    private fetchAndStorePairingCode;
+    requestPairingCodeNow(): Promise<{
+        code: string | null;
+        authenticated: boolean;
+        ready: boolean;
+    }>;
 }
 export declare const whatsappService: WhatsAppService;
 export default WhatsAppService;

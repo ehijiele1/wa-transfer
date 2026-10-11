@@ -16,7 +16,7 @@ class BasePlatformAdapter {
     }
     validateContent(content) {
         const errors = [];
-        if (content.content.length > this.config.maxTextLength) {
+        if (this.formatContent(content).length > this.config.maxTextLength) {
             errors.push(`Content exceeds maximum length of ${this.config.maxTextLength} characters`);
         }
         if (content.mediaUrls.length > this.config.maxImagesPerPost) {
@@ -69,15 +69,10 @@ class FacebookAdapter extends BasePlatformAdapter {
                 throw new Error(`Content validation failed: ${validation.errors.join(', ')}`);
             }
             const formattedContent = this.formatContent(content);
-            let mediaAttachments = [];
+            const mediaAttachments = [];
             for (const mediaUrl of content.mediaUrls) {
-                try {
-                    const mediaId = await this.uploadMedia(mediaUrl, `facebook_${Date.now()}.jpg`);
-                    mediaAttachments.push(mediaId);
-                }
-                catch (error) {
-                    logger_1.logger.warn(`Failed to upload media ${mediaUrl}`, { error, platform: this.platform });
-                }
+                const mediaId = await this.uploadMedia(mediaUrl, `facebook_${Date.now()}.jpg`);
+                mediaAttachments.push(mediaId);
             }
             const postData = {
                 message: formattedContent,
@@ -203,11 +198,13 @@ class FacebookAdapter extends BasePlatformAdapter {
     }
     async uploadMedia(mediaUrl, filename) {
         try {
-            const response = await fetch(mediaUrl);
-            const arrayBuffer = await response.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
+            const response = await (0, fetchWithTimeout_1.fetchWithTimeout)(mediaUrl, {}, 30000);
+            if (!response.ok) {
+                throw new Error(`Failed to download media: ${response.status}`);
+            }
+            const blob = await response.blob();
             const formData = new FormData();
-            formData.append('source', buffer, filename);
+            formData.append('source', blob, filename);
             formData.append('published', 'false');
             const uploadResponse = await fetch(`https://graph.facebook.com/${this.config.graphApiVersion}/${this.config.pageId}/photos`, {
                 method: 'POST',

@@ -14,8 +14,11 @@ export interface GenerateOptions {
 declare class OllamaService {
     private baseUrl;
     private model;
+    private provider;
+    private apiKey;
     private httpClient;
     constructor();
+    private chatCompletions;
     chat(messages: ChatMessage[], options?: ChatOptions): Promise<string>;
     generate(prompt: string, options?: GenerateOptions): Promise<string>;
     embed(text: string): Promise<number[]>;

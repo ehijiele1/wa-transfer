@@ -32,8 +32,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app user
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+# Create app user (uid/gid 1000 — required by Hugging Face Spaces; matches
+# docker-compose `user: "1000:1000"`)
+RUN groupadd -g 1000 appuser && useradd -r -u 1000 -g appuser appuser
 
 WORKDIR /app
 

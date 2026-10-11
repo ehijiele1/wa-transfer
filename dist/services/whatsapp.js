@@ -38,6 +38,7 @@ const whatsapp_web_js_1 = require("whatsapp-web.js");
 const inputGuard_1 = require("./inputGuard");
 const logger_1 = require("../utils/logger");
 const groupManager_1 = require("./groupManager");
+const supabaseAuth_1 = require("./supabaseAuth");
 class WhatsAppService {
     client = null;
     messageCallbacks = [];
@@ -46,6 +47,10 @@ class WhatsAppService {
     retryDelayMs = 5000;
     readyTime = 0;
     tableMissingLogged = false;
+    authenticated = false;
+    pairingTimer = null;
+    lastCodeAt = 0;
+    pairingNumber = '';
     constructor() { }
     async connect() {
         if (this.client) {
@@ -65,11 +70,20 @@ class WhatsAppService {
         }
         catch { }
         try {
-            this.client = new whatsapp_web_js_1.Client({
-                authStrategy: new whatsapp_web_js_1.LocalAuth({
+            const sessionStore = (process.env.WA_SESSION_STORE || 'local').toLowerCase();
+            const authStrategy = sessionStore === 'supabase'
+                ? new whatsapp_web_js_1.RemoteAuth({
+                    clientId: 'wa-transfer',
+                    store: new supabaseAuth_1.SupabaseSessionStore('wa-transfer'),
+                    backupSyncIntervalMs: 60000,
+                })
+                : new whatsapp_web_js_1.LocalAuth({
                     clientId: 'wa-transfer',
                     dataPath: './wwebjs-auth',
-                }),
+                });
+            this.client = new whatsapp_web_js_1.Client({
+                authStrategy,
+                userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
                 puppeteer: {
                     args: [
                         '--no-sandbox',
@@ -88,21 +102,36 @@ class WhatsAppService {
             await this.client.initialize();
             logger_1.logger.info('WhatsApp client connected successfully');
             const pairingNumber = (process.env.WHATSAPP_PAIRING_NUMBER || '').replace(/^\+/, '').trim();
+            this.pairingNumber = pairingNumber;
             if (pairingNumber) {
-                try {
-                    const code = await this.client.requestPairingCode(pairingNumber);
-                    logger_1.logger.info(`Pairing code generated: ${code} — enter on phone for ${pairingNumber}: WhatsApp > Linked devices > Link with phone number`);
-                    try {
-                        const fs = await Promise.resolve().then(() => __importStar(require('fs')));
-                        await fs.promises.writeFile('/tmp/pairing-code.txt', code);
-                        await fs.promises.writeFile('/tmp/qr.txt', code);
-                        console.log(`[PAIRING_CODE] ${code}`);
+                const requestCode = async () => {
+                    const code = await this.fetchAndStorePairingCode();
+                    return code !== null;
+                };
+                const stopPairingLoop = () => {
+                    if (this.pairingTimer) {
+                        clearInterval(this.pairingTimer);
+                        this.pairingTimer = null;
                     }
-                    catch { }
-                }
-                catch (e) {
-                    logger_1.logger.error('Failed to generate pairing code, falling back to QR', e);
-                }
+                };
+                const ensureLoop = () => {
+                    if (this.pairingTimer || this.authenticated)
+                        return;
+                    this.pairingTimer = setInterval(() => {
+                        if (this.authenticated) {
+                            stopPairingLoop();
+                            return;
+                        }
+                        if (Date.now() - this.lastCodeAt > 6 * 60 * 1000) {
+                            void requestCode();
+                        }
+                    }, 5 * 60 * 1000);
+                };
+                setTimeout(() => {
+                    void requestCode().then(() => {
+                        ensureLoop();
+                    });
+                }, 20000);
             }
         }
         catch (error) {
@@ -136,6 +165,7 @@ class WhatsAppService {
             }
         });
         this.client.on('code', async (code) => {
+            this.lastCodeAt = Date.now();
             logger_1.logger.info(`Pairing code: ${code} — enter on phone: WhatsApp > Linked devices > Link with phone number`);
             try {
                 const fs = await Promise.resolve().then(() => __importStar(require('fs')));
@@ -146,6 +176,11 @@ class WhatsAppService {
             catch { }
         });
         this.client.on('authenticated', () => {
+            this.authenticated = true;
+            if (this.pairingTimer) {
+                clearInterval(this.pairingTimer);
+                this.pairingTimer = null;
+            }
             logger_1.logger.info('WhatsApp authenticated');
         });
         this.client.on('auth_failure', (msg) => {
@@ -162,6 +197,11 @@ class WhatsAppService {
         });
         this.client.on('ready', async () => {
             this.readyTime = Date.now();
+            this.authenticated = true;
+            if (this.pairingTimer) {
+                clearInterval(this.pairingTimer);
+                this.pairingTimer = null;
+            }
             this.reconnectAttempts = 0;
             logger_1.logger.info('WhatsApp connection established');
             setTimeout(async () => {
@@ -322,6 +362,11 @@ class WhatsAppService {
         this.messageCallbacks.push(callback);
     }
     async disconnect() {
+        if (this.pairingTimer) {
+            clearInterval(this.pairingTimer);
+            this.pairingTimer = null;
+        }
+        this.authenticated = false;
         if (this.client) {
             this.client.removeAllListeners();
             await this.client.destroy();
@@ -340,6 +385,46 @@ class WhatsAppService {
     }
     isReady() {
         return !!(this.client && this.client.info);
+    }
+    isAuthenticated() {
+        return this.authenticated;
+    }
+    getPairingStatus() {
+        return {
+            authenticated: this.authenticated,
+            ready: this.isReady(),
+            pairingNumberSet: this.pairingNumber.length > 0,
+            lastCodeAt: this.lastCodeAt,
+            lastCodeAgeSec: this.lastCodeAt > 0 ? Math.round((Date.now() - this.lastCodeAt) / 1000) : null,
+        };
+    }
+    async fetchAndStorePairingCode() {
+        if (this.authenticated || !this.client || !this.pairingNumber)
+            return null;
+        try {
+            const code = (await this.client.requestPairingCode(this.pairingNumber));
+            this.lastCodeAt = Date.now();
+            logger_1.logger.info(`Pairing code generated: ${code} — enter on phone for ${this.pairingNumber}: WhatsApp > Linked devices > Link with phone number`);
+            try {
+                const fs = await Promise.resolve().then(() => __importStar(require('fs')));
+                await fs.promises.writeFile('/tmp/pairing-code.txt', code);
+                await fs.promises.writeFile('/tmp/qr.txt', code);
+                console.log(`[PAIRING_CODE] ${code}`);
+            }
+            catch { }
+            return code;
+        }
+        catch (e) {
+            logger_1.logger.warn('Pairing code request failed, will retry in background', { error: e?.message ?? String(e) });
+            return null;
+        }
+    }
+    async requestPairingCodeNow() {
+        if (this.authenticated || this.isReady()) {
+            return { code: null, authenticated: true, ready: this.isReady() };
+        }
+        const code = await this.fetchAndStorePairingCode();
+        return { code, authenticated: this.authenticated, ready: this.isReady() };
     }
 }
 exports.WhatsAppService = WhatsAppService;

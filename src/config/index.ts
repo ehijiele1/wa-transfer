@@ -19,6 +19,11 @@ const config: Config = {
   ollama: {
     baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
     model: process.env.OLLAMA_MODEL || 'llama2',
+    // 'ollama' (default, local/self-hosted) or 'openai-compatible'
+    // (e.g. NVIDIA NIM at https://integrate.api.nvidia.com/v1 — free, ~40 req/min,
+    //  no daily cap; ideal for the HF Space deployment where no Ollama runs).
+    provider: (process.env.LLM_PROVIDER as 'ollama' | 'openai-compatible') || 'ollama',
+    apiKey: process.env.LLM_API_KEY || '',
   },
   instagram: instagramConfig,
   socialMedia: socialMediaConfig,

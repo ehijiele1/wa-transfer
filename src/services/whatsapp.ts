@@ -1,9 +1,10 @@
-import { Client, LocalAuth, Message as WWebMessage } from 'whatsapp-web.js';
+import { Client, LocalAuth, RemoteAuth, Message as WWebMessage } from 'whatsapp-web.js';
 import { WhatsAppMessage } from '../types';
 import { getInputGuard } from './inputGuard';
 import { logger } from '../utils/logger';
 import { whatsappCircuitBreaker } from '../utils/circuitBreaker';
 import { getGroupManager } from './groupManager';
+import { SupabaseSessionStore } from './supabaseAuth';
 
 export class WhatsAppService {
   private client: Client | null = null;
@@ -35,11 +36,24 @@ export class WhatsAppService {
       }
     } catch {}
     try {
+      // Session store: 'supabase' (host-independent, survives restarts — required
+      // on HF Spaces where local disk is ephemeral) or 'local' (default, plain
+      // LocalAuth for local dev). Same Supabase project = same pairing anywhere.
+      const sessionStore = (process.env.WA_SESSION_STORE || 'local').toLowerCase();
+      const authStrategy =
+        sessionStore === 'supabase'
+          ? new RemoteAuth({
+              clientId: 'wa-transfer',
+              store: new SupabaseSessionStore('wa-transfer'),
+              backupSyncIntervalMs: 60000,
+            })
+          : new LocalAuth({
+              clientId: 'wa-transfer',
+              dataPath: './wwebjs-auth',
+            });
+
       this.client = new Client({
-        authStrategy: new LocalAuth({
-          clientId: 'wa-transfer',
-          dataPath: './wwebjs-auth',
-        }),
+        authStrategy,
         // WhatsApp Web rejects the library's stale default UA (Chrome/101);
         // send a modern UA so the page bootstraps instead of showing
         // "update Chrome".

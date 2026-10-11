@@ -16,6 +16,9 @@ export declare class HealthServer {
     private handleReadinessRequest;
     private handleMetricsRequest;
     private handleGroupsRequest;
+    private handlePairingRefreshRequest;
+    private handlePairingStatusRequest;
+    private handleQrPngRequest;
     private handleRootRequest;
     private setupRoutes;
     start(): Promise<void>;

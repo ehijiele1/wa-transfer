@@ -24,16 +24,63 @@ export interface GenerateOptions {
 class OllamaService {
   private baseUrl: string;
   private model: string;
+  private provider: 'ollama' | 'openai-compatible';
+  private apiKey: string;
   private httpClient: any;
 
   constructor() {
     this.baseUrl = config.ollama.baseUrl;
     this.model = config.ollama.model;
+    this.provider = config.ollama.provider;
+    this.apiKey = config.ollama.apiKey;
     this.httpClient = getHttpClient();
+  }
+
+  /**
+   * Call an OpenAI-compatible chat/completions endpoint (e.g. NVIDIA NIM).
+   * baseUrl must include the version path, e.g. https://integrate.api.nvidia.com/v1
+   */
+  private async chatCompletions(
+    messages: ChatMessage[],
+    temperature: number,
+    jsonFormat: boolean
+  ): Promise<string> {
+    const response = await fetchWithTimeout(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages,
+        temperature,
+        stream: false,
+        ...(jsonFormat ? { response_format: { type: 'json_object' } } : {}),
+      }),
+    }, 60000);
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`LLM chat/completions failed: ${response.statusText} ${body.slice(0, 200)}`);
+    }
+
+    const data: any = await response.json();
+    return data.choices?.[0]?.message?.content || '';
   }
 
   async chat(messages: ChatMessage[], options: ChatOptions = {}): Promise<string> {
     return ollamaCircuitBreaker.execute(async () => {
+      const temperature = options.temperature ?? 0.7;
+
+      if (this.provider === 'openai-compatible') {
+        logger.debug('Calling LLM chat (openai-compatible)', {
+          model: this.model,
+          messageCount: messages.length,
+        });
+        return this.chatCompletions(messages, temperature, options.format === 'json');
+      }
+
       logger.debug('Calling Ollama chat', { model: this.model, messageCount: messages.length });
       
       const response = await fetchWithTimeout(`${this.baseUrl}/api/chat`, {
@@ -44,7 +91,7 @@ class OllamaService {
           messages,
           stream: false,
           options: {
-            temperature: options.temperature ?? 0.7,
+            temperature,
           },
           ...(options.format ? { format: options.format } : {}),
         }),
@@ -61,6 +108,20 @@ class OllamaService {
 
   async generate(prompt: string, options: GenerateOptions = {}): Promise<string> {
     return ollamaCircuitBreaker.execute(async () => {
+      const temperature = options.temperature ?? 0.7;
+
+      if (this.provider === 'openai-compatible') {
+        logger.debug('Calling LLM generate (openai-compatible)', {
+          model: this.model,
+          promptLength: prompt.length,
+        });
+        return this.chatCompletions(
+          [{ role: 'user', content: prompt }],
+          temperature,
+          options.format === 'json'
+        );
+      }
+
       logger.debug('Calling Ollama generate', { model: this.model, promptLength: prompt.length });
       
       const response = await fetchWithTimeout(`${this.baseUrl}/api/generate`, {
@@ -71,7 +132,7 @@ class OllamaService {
           prompt,
           stream: false,
           options: {
-            temperature: options.temperature ?? 0.7,
+            temperature,
           },
           ...(options.format ? { format: options.format } : {}),
         }),
@@ -87,6 +148,14 @@ class OllamaService {
   }
 
   async embed(text: string): Promise<number[]> {
+    // Embeddings are Ollama-only; with an openai-compatible provider we skip
+    // them gracefully (embeddings are optional metadata on listings).
+    if (this.provider === 'openai-compatible') {
+      logger.debug('Skipping embeddings: not supported by openai-compatible provider', {
+        textLength: text.length,
+      });
+      return [];
+    }
     return ollamaCircuitBreaker.execute(async () => {
       logger.debug('Calling Ollama embed', { model: 'nomic-embed-text', textLength: text.length });
       

@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const supabase_js_1 = require("@supabase/supabase-js");
 const config_1 = __importDefault(require("../config"));
 const logger_1 = require("../utils/logger");
+const websiteHandoff_1 = require("./websiteHandoff");
 class SupabaseService {
     anonClient;
     serviceClient;
@@ -141,6 +142,10 @@ class SupabaseService {
                 throw serviceError;
             }
         }
+    }
+    async handoffPropertyToWebsite(property) {
+        const handoffService = new websiteHandoff_1.WebsiteHandoffService(this.getServiceClient());
+        return handoffService.handoff(property);
     }
     async getUnprocessedProperties() {
         const client = this.getAnonClient();

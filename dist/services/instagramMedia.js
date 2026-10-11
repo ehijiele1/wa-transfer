@@ -5,7 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.InstagramMediaService = void 0;
 const instagram_1 = __importDefault(require("../config/instagram"));
-const utils_1 = require("../utils");
 const urlGuard_1 = require("./urlGuard");
 const logger_1 = require("../utils/logger");
 const fetchWithTimeout_1 = require("../utils/fetchWithTimeout");
@@ -18,13 +17,7 @@ class InstagramMediaService {
             urlGuard.validateUrl(imageUrl);
             const safeUrlForLogging = urlGuard.sanitizeUrlForLogging(imageUrl);
             logger_1.logger.info(`Downloading image from: ${safeUrlForLogging}`);
-            const imageResponse = await (0, fetchWithTimeout_1.fetchWithTimeout)(imageUrl, {}, 30000);
-            if (!imageResponse.ok) {
-                throw new Error(`Failed to download image: ${imageResponse.statusText}`);
-            }
-            const imageBuffer = await imageResponse.arrayBuffer();
-            logger_1.logger.info(`Uploading image to Instagram: ${filename}`);
-            const uploadResponse = await (0, utils_1.retry)(() => this.uploadMediaContainer(imageBuffer, filename, altText), 3);
+            const uploadResponse = await this.uploadMediaContainer(imageUrl, altText);
             logger_1.logger.info(`Image uploaded successfully: ${uploadResponse.id}`);
             return uploadResponse;
         }
@@ -33,11 +26,10 @@ class InstagramMediaService {
             throw error;
         }
     }
-    async uploadMediaContainer(imageBuffer, filename, altText) {
+    async uploadMediaContainer(imageUrl, altText) {
         const formData = new FormData();
-        const blob = new Blob([imageBuffer]);
-        formData.append('file', blob, filename);
-        formData.append('published', 'false');
+        formData.append('image_url', imageUrl);
+        formData.append('is_carousel_item', 'true');
         if (altText) {
             formData.append('alt_text', altText);
         }
@@ -127,7 +119,7 @@ class InstagramMediaService {
     async getMediaStatus(mediaId) {
         try {
             const response = await circuitBreaker_1.instagramCircuitBreaker.execute(async () => {
-                return await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://graph.facebook.com/${this.config.graphApiVersion}/${mediaId}`, {
+                return await (0, fetchWithTimeout_1.fetchWithTimeout)(`https://graph.facebook.com/${this.config.graphApiVersion}/${mediaId}?fields=status_code`, {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${this.config.accessToken}`,

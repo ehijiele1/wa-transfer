@@ -12,6 +12,10 @@ export interface Config {
   ollama: {
     baseUrl: string;
     model: string;
+    /** 'ollama' = native Ollama API; 'openai-compatible' = OpenAI chat/completions (e.g. NVIDIA NIM) */
+    provider: 'ollama' | 'openai-compatible';
+    /** API key for the openai-compatible provider (e.g. NVIDIA NIM key) */
+    apiKey: string;
   };
   instagram: {
     accessToken: string;

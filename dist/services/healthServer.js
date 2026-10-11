@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.stopHealthServer = exports.startHealthServer = exports.healthServer = exports.HealthServer = void 0;
 const healthService_1 = require("./healthService");
@@ -174,6 +207,62 @@ class HealthServer {
             this.createErrorResponse(res, error instanceof Error ? error.message : 'Failed to fetch groups', 500);
         }
     }
+    async handlePairingRefreshRequest(req, res) {
+        try {
+            if (req.method !== 'GET') {
+                this.createErrorResponse(res, 'Method not allowed', 405);
+                return;
+            }
+            const result = await whatsapp_1.whatsappService.requestPairingCodeNow();
+            this.createJsonResponse(res, {
+                ...result,
+                timestamp: new Date().toISOString(),
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('HealthServer', 'Pairing refresh request failed', {
+                error: error instanceof Error ? error.message : String(error),
+            });
+            this.createErrorResponse(res, error instanceof Error ? error.message : 'Failed to refresh pairing code', 500);
+        }
+    }
+    async handlePairingStatusRequest(req, res) {
+        try {
+            if (req.method !== 'GET') {
+                this.createErrorResponse(res, 'Method not allowed', 405);
+                return;
+            }
+            const status = whatsapp_1.whatsappService.getPairingStatus();
+            this.createJsonResponse(res, {
+                ...status,
+                timestamp: new Date().toISOString(),
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('HealthServer', 'Pairing status request failed', {
+                error: error instanceof Error ? error.message : String(error),
+            });
+            this.createErrorResponse(res, error instanceof Error ? error.message : 'Failed to get pairing status', 500);
+        }
+    }
+    async handleQrPngRequest(req, res) {
+        try {
+            if (req.method !== 'GET') {
+                this.createErrorResponse(res, 'Method not allowed', 405);
+                return;
+            }
+            const fs = await Promise.resolve().then(() => __importStar(require('fs')));
+            const data = await fs.promises.readFile('/tmp/qr.png');
+            res.writeHead(200, {
+                'Content-Type': 'image/png',
+                'Cache-Control': 'no-store, no-cache, must-revalidate',
+            });
+            res.end(data);
+        }
+        catch (error) {
+            this.createErrorResponse(res, 'QR not available yet — try again in 20 seconds', 404);
+        }
+    }
     async handleRootRequest(req, res) {
         try {
             if (req.method !== 'GET') {
@@ -199,6 +288,9 @@ class HealthServer {
                     liveness: '/liveness',
                     readiness: '/readiness',
                     metrics: '/metrics',
+                    pairingRefresh: '/api/pairing/refresh',
+                    pairingStatus: '/api/pairing/status',
+                    qrPng: '/api/qr.png',
                 },
                 ...(typeof healthData === 'object' && 'overall' in healthData ? {
                     overall: healthData.overall,
@@ -247,6 +339,15 @@ class HealthServer {
             }
             else if (url === '/groups' || url === '/api/groups') {
                 this.handleGroupsRequest(req, res);
+            }
+            else if (url === '/api/pairing/refresh') {
+                this.handlePairingRefreshRequest(req, res);
+            }
+            else if (url === '/api/pairing/status') {
+                this.handlePairingStatusRequest(req, res);
+            }
+            else if (url === '/api/qr.png') {
+                this.handleQrPngRequest(req, res);
             }
             else if (url === '/' || url === '/health') {
                 this.handleRootRequest(req, res);

@@ -21,6 +21,8 @@ const config = {
     ollama: {
         baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
         model: process.env.OLLAMA_MODEL || 'llama2',
+        provider: process.env.LLM_PROVIDER || 'ollama',
+        apiKey: process.env.LLM_API_KEY || '',
     },
     instagram: instagram_1.default,
     socialMedia: socialMedia_1.default,

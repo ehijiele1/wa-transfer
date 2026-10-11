@@ -85,6 +85,7 @@ class MessageProcessingJob {
         if (classification.type === 'property' && classification.extractedData) {
             console.log(`🏠 Property detected: ${classification.extractedData.title}`);
             await this.supabaseService.savePropertyListing(classification.extractedData);
+            await this.supabaseService.handoffPropertyToWebsite(classification.extractedData);
         }
         else if (classification.type === 'promotion' && classification.extractedData) {
             console.log(`🎯 Promotion detected: ${classification.extractedData.title}`);
