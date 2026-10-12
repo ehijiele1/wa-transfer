@@ -34,7 +34,7 @@
 [CmdletBinding()]
 param(
     [string]$VMHost = "ubuntu@140.238.79.76",
-    [string]$SSHKey = "C:\Users\ehiji\OneDrive\Desktop\WebApps\wa-transfer\ssh-wa-transfer-backup.key",
+    [string]$SSHKey = "$env:USERPROFILE\.ssh\wa-transfer-oracle",
     [string]$AppDir = "/home/ubuntu/wa-transfer",
     [switch]$SkipTests,
     [switch]$Force
